@@ -1,0 +1,97 @@
+diff --git a/sdl/scrnmng.c b/sdl/scrnmng.c
+index 2e5016f..2420246 100755
+--- a/sdl/scrnmng.c
++++ b/sdl/scrnmng.c
+@@ -36,6 +36,15 @@ static SCRNSURF scrnsurf;
+ SDL_Window* s_window;
+ static SDL_Renderer* s_renderer;
+ static SDL_Texture* s_texture;
++
++#if defined(NP2_IOS_KEYBAR)
++/* Empty band (in PC-98 screen pixels) below the screen, kept inside the
++ * logical size so that the iOS key bar can sit there (scrnmng_setbottompad). */
++static int s_bottompad;
++#define	LOGICAL_PAD		s_bottompad
++#else
++#define	LOGICAL_PAD		0
++#endif
+ #else
+ static SDL_VideoInfo* s1_videoinfo;
+ #endif
+@@ -160,7 +169,7 @@ BRESULT scrnmng_create(UINT8 mode) {
+ 	if(mode & SCRNMODE_ROTATEMASK) {
+ 		SDL_RenderSetLogicalSize(s_renderer, scrnmng.height, scrnmng.width);
+ 	} else {
+-		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width, scrnmng.height);
++		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width, scrnmng.height + LOGICAL_PAD);
+ 	}
+ #endif
+ 	switch(scrnmng.bpp) {
+@@ -306,7 +315,7 @@ void scrnmng_setwidth(int posx, int width) {
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+ 		SDL_RenderSetLogicalSize(s_renderer, scrnmng.height, width);
+ 	} else {
+-		SDL_RenderSetLogicalSize(s_renderer, width, scrnmng.height);
++		SDL_RenderSetLogicalSize(s_renderer, width, scrnmng.height + LOGICAL_PAD);
+ 	}
+ #endif
+ #if defined(__OPENDINGUX__) && !defined(OPENDINGUX_VGA)
+@@ -394,7 +403,7 @@ void scrnmng_setheight(int posy, int height) {
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+ 		SDL_RenderSetLogicalSize(s_renderer, height, scrnmng.width);
+ 	} else {
+-		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width, height);
++		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width, height + LOGICAL_PAD);
+ 	}
+ #endif
+ #if defined(__OPENDINGUX__) && !defined(OPENDINGUX_VGA)
+@@ -681,7 +690,13 @@ scrnmng_update(void)
+ #if USE_SDL >= 3
+ 	SDL_RenderTexture(s_renderer, s_texture, NULL, NULL);
+ #else
+-	SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
++	if (LOGICAL_PAD && !(scrnmode & SCRNMODE_ROTATEMASK)) {
++		SDL_Rect dst = {0, 0, 0, 0};
++		SDL_QueryTexture(s_texture, NULL, NULL, &dst.w, &dst.h);
++		SDL_RenderCopy(s_renderer, s_texture, NULL, &dst);
++	} else {
++		SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
++	}
+ #endif
+ 	SDL_RenderPresent(s_renderer);
+ #else
+@@ -720,3 +735,20 @@ void scrnmng_bltwab(void) {
+ 	}
+ #endif
+ }
++
++#if defined(NP2_IOS_KEYBAR)
++void scrnmng_setbottompad(int pad)
++{
++	int w, h;
++
++	if (pad == s_bottompad) {
++		return;
++	}
++	s_bottompad = pad;
++	if (s_renderer && s_texture && !(scrnmode & SCRNMODE_ROTATEMASK)) {
++		SDL_QueryTexture(s_texture, NULL, NULL, &w, &h);
++		SDL_RenderSetLogicalSize(s_renderer, w, h + pad);
++		scrnmng_update();
++	}
++}
++#endif
+diff --git a/sdl/scrnmng.h b/sdl/scrnmng.h
+index 93af0c7..20c5b49 100755
+--- a/sdl/scrnmng.h
++++ b/sdl/scrnmng.h
+@@ -97,6 +97,9 @@ BRESULT scrnmng_entermenu(SCRNMENU *smenu);
+ void scrnmng_leavemenu(void);
+ void scrnmng_menudraw(const RECT_T *rct);
+ void scrnmng_update(void);
++#if defined(NP2_IOS_KEYBAR)
++void scrnmng_setbottompad(int pad);
++#endif
+ void scrnmng_updatecursor(void);
+ 
+ void scrnmng_updatefsres(void);

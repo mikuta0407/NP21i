@@ -34,6 +34,7 @@
 #include <diskimage/fddfile.h>
 #include <kbtrans.h>
 #include <sysmenu.h>
+#include <scrnmng.h>
 
 enum {
 	SCREEN_WIDTH	= 640,
@@ -41,7 +42,7 @@ enum {
 };
 
 static const CGFloat kMinBarHeight = 30;
-static const CGFloat kMaxBarHeight = 44;
+static const CGFloat kMaxBarHeight = 50;
 static const CGFloat kOverlayBarHeight = 40;
 static const CGFloat kMinSideWidth = 44;
 static const CGFloat kMaxSideWidth = 76;
@@ -221,6 +222,7 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	UIButton *_hideButton;
 	UIButton *_showButton;
 	UILabel *_speedLabel;
+	CGSize _screenSize;		/* PC-98 screen size used for the last layout */
 	int _slowCount;
 	NSMutableArray<NP2KeyButton *> *_keys;
 	NSMutableArray<NSNumber *> *_separatorBefore;	/* per key */
@@ -308,6 +310,7 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		}
 		[bar refreshModifiers];
 		[bar refreshSpeed];
+		[bar checkScreenSize];
 	}];
 	[self applyHidden];
 	return self;
@@ -383,6 +386,16 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 			button.backgroundColor = keyinput_isactive(button.code)
 				? UIColor.systemOrangeColor : [UIColor colorWithWhite:0.30 alpha:1];
 		}
+	}
+}
+
+/* The guest can switch to 640x480 etc. */
+- (void)checkScreenSize
+{
+	int w = 0, h = 0;
+	scrnmng_getsize(&w, &h);
+	if (w != (int)_screenSize.width || h != (int)_screenSize.height) {
+		[self setNeedsLayout];
 	}
 }
 
@@ -696,13 +709,37 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	[super layoutSubviews];
 	CGRect bounds = self.bounds;
 	UIEdgeInsets safe = self.safeAreaInsets;
+	CGFloat viewW = bounds.size.width;
+	CGFloat viewH = bounds.size.height;
 
-	/* where SDL draws the screen: aspect fit, centered */
-	CGFloat scale = MIN(bounds.size.width / SCREEN_WIDTH, bounds.size.height / SCREEN_HEIGHT);
-	CGFloat screenW = SCREEN_WIDTH * scale;
-	CGFloat screenH = SCREEN_HEIGHT * scale;
-	CGFloat bottomGap = (bounds.size.height - screenH) / 2;
-	CGFloat sideGap = (bounds.size.width - screenW) / 2 - MAX(safe.left, safe.right);
+	/* SDL draws the PC-98 screen (sw x sh, plus `pad` empty lines below it)
+	 * aspect fit and centered */
+	int sw = SCREEN_WIDTH, sh = SCREEN_HEIGHT;
+	scrnmng_getsize(&sw, &sh);
+	if (sw <= 0 || sh <= 0) {
+		sw = SCREEN_WIDTH;
+		sh = SCREEN_HEIGHT;
+	}
+	_screenSize = CGSizeMake(sw, sh);
+	CGFloat sideGap = (viewW - sw * MIN(viewW / sw, viewH / sh)) / 2 - MAX(safe.left, safe.right);
+
+	/* Wide screens (iPad) leave little room below; make SDL leave a band
+	 * for the bar, shrinking the screen a little. */
+	int pad = 0;
+	if (!_hidden && sideGap < kMinSideWidth) {
+		int maxpad = sh / 8;
+		for (pad = 0; pad < maxpad; pad++) {
+			CGFloat s = MIN(viewW / sw, viewH / (sh + pad));
+			CGFloat top = (viewH - (sh + pad) * s) / 2;
+			if (viewH - top - sh * s >= kMaxBarHeight) {
+				break;
+			}
+		}
+	}
+	scrnmng_setbottompad(pad);
+	CGFloat scale = MIN(viewW / sw, viewH / (sh + pad));
+	CGFloat screenBottom = (viewH - (sh + pad) * scale) / 2 + sh * scale;
+	CGFloat bottomGap = viewH - screenBottom;
 
 	CGFloat bottom = bounds.size.height;
 	if (!CGRectIsNull(_keyboardFrame) && self.window) {
@@ -719,8 +756,9 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		frame = CGRectMake(0, bottom - kOverlayBarHeight, bounds.size.width, kOverlayBarHeight);
 	}
 	else if (bottomGap >= kMinBarHeight) {
+		/* right below the screen */
 		CGFloat height = MIN(bottomGap, kMaxBarHeight);
-		frame = CGRectMake(safe.left, bounds.size.height - height, bounds.size.width - safe.left - safe.right, height);
+		frame = CGRectMake(safe.left, screenBottom, bounds.size.width - safe.left - safe.right, height);
 	}
 	else if (sideGap >= kMinSideWidth) {
 		CGFloat width = MIN(sideGap, kMaxSideWidth);
@@ -740,9 +778,10 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		[self layoutHorizontal:frame.size];
 	}
 
+	/* top right, left of the bar when that is a column there */
 	CGSize speed = CGSizeMake(84, 22);
-	_speedLabel.frame = CGRectMake(bounds.size.width - safe.right - speed.width - kGap,
-		MAX(safe.top, kGap), speed.width, speed.height);
+	CGFloat right = (vertical && !_hidden) ? CGRectGetMinX(frame) : bounds.size.width - safe.right;
+	_speedLabel.frame = CGRectMake(right - speed.width - kGap, MAX(safe.top, kGap), speed.width, speed.height);
 
 	CGSize show = CGSizeMake(44, 30);
 	_showButton.frame = CGRectMake(bounds.size.width - safe.right - show.width - kGap,
@@ -830,6 +869,11 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	}
 	else if ([command isEqualToString:@"!settings"]) {
 		settingsview_present([self hostController]);
+	}
+	else if ([command hasPrefix:@"!newdisk:"]) {
+		/* "!newdisk:<index>:<MB>" */
+		NSArray<NSString *> *args = [[command substringFromIndex:9] componentsSeparatedByString:@":"];
+		settingsview_debugnewdisk(args[0].intValue, (unsigned int)args.lastObject.intValue);
 	}
 	else if ([command hasPrefix:@"!tap:"]) {
 		settingsview_debugtap([command substringFromIndex:5].UTF8String);
@@ -947,7 +991,13 @@ void keybar_initialize(void)
 void keybar_pickhdd(unsigned char drv)
 {
 	[s_keybar pickFileInto:kHddDir handler:^(NSString *path) {
-		[s_keybar setHdd:drv path:path];
+		REG8 slot = drv;
+		if (slot == KEYBAR_HDD_AUTO) {
+			/* Virtual98 (.hdd) images are SCSI disks; the others (.hdi, .nhd,
+			 * .thd, ...) are SASI/IDE disks */
+			slot = [path.pathExtension.lowercaseString isEqualToString:@"hdd"] ? 0x20 : 0x00;
+		}
+		[s_keybar setHdd:slot path:path];
 	}];
 }
 

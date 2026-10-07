@@ -92,6 +92,44 @@
 				<integer>1</integer>
 			</array>
 		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>Title</key>
+			<string>動作</string>
+			<key>FooterText</key>
+			<string>ほかの設定（MIDI の接続先、CPU 速度など）はアプリ内の ≡ →「設定…」にあります。</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>バックグラウンドでも動作</string>
+			<key>Key</key>
+			<string>run_in_background</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>前回の状態から再開</string>
+			<key>Key</key>
+			<string>resume_state</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>速度が足りないときに警告</string>
+			<key>Key</key>
+			<string>show_speed_warning</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
 	</array>
 </dict>
 </plist>

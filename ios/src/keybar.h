@@ -13,7 +13,9 @@ extern "C" {
 void keybar_initialize(void);
 
 /* Lets the user pick a hard disk image for a slot (0x00-0x01 IDE,
- * 0x20-0x23 SCSI), then offers to reset. */
+ * 0x20-0x23 SCSI, or KEYBAR_HDD_AUTO: SCSI #0 for .hdd, else IDE #1), then
+ * offers to reset. */
+#define KEYBAR_HDD_AUTO	0xff
 void keybar_pickhdd(unsigned char drv);
 
 /* Assigns an image (path relative to the data directory, NULL = none) to a
@@ -28,7 +30,8 @@ void keybar_sethdd(unsigned char drv, const char *path);
  * 00-01 IDE, 20-23 SCSI; takes effect at "!reset"),
  * "!importhdd<drv>:<absolute path>" (copy into hdd/ as if picked elsewhere),
  * "!dumphddmenu" (log the hard disk menu), "!settings", "!guide",
- * "!dismiss" (close what is presented), "!tap:<row title>" (on the settings screen). */
+ * "!dismiss" (close what is presented), "!tap:<row title>" (on the settings screen),
+ * "!newdisk:<index>:<MB>" (as on the new disk screen). */
 void keybar_debugcommand(const char *command);
 
 #ifdef __cplusplus

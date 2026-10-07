@@ -625,6 +625,17 @@ void settingsview_debugtap(const char *title)
 	NSLog(@"settings: no row %@", wanted);
 }
 
+void settingsview_debugnewdisk(int index, unsigned int sizemb)
+{
+	UIViewController *top = ((UIWindowScene *)UIApplication.sharedApplication.connectedScenes.allObjects.firstObject).windows.firstObject.rootViewController;
+	while (top.presentedViewController) {
+		top = top.presentedViewController;
+	}
+	if (index >= 0 && (size_t)index < NELEMENTS(s_newdisks)) {
+		create_disk(top, &s_newdisks[index], sizemb);
+	}
+}
+
 // ---- first-run guide
 
 static BOOL has_bootable_disk(void)
@@ -662,7 +673,7 @@ void settingsview_presentguide(UIViewController *host)
 	                                                        preferredStyle:UIAlertControllerStyleAlert];
 	[alert addAction:[UIAlertAction actionWithTitle:@"ハードディスクを選ぶ…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
 		(void)action;
-		keybar_pickhdd(0x20);
+		keybar_pickhdd(KEYBAR_HDD_AUTO);
 	}]];
 	[alert addAction:[UIAlertAction actionWithTitle:@"ファイル App で開く" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
 		(void)action;
