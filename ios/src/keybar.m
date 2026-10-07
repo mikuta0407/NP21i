@@ -4,7 +4,9 @@
  *
  * The PC-98 keys that iPad / iPhone keyboards lack (STOP, COPY, f.1-f.10,
  * vf.1-vf.5, HOME/CLR, HELP, ROLL UP/DOWN, GRPH, KANA, XFER, NFER, ...),
- * plus a menu for floppy images, reset and the NP2 menu.
+ * plus a menu for floppy and hard disk images, reset and the NP2 menu.
+ * Disk images picked outside the data directory are copied into fdd/ or
+ * hdd/; hard disk changes are saved to the config and apply at reset.
  *
  * The bar sits in the space the 16:10 screen leaves free (below it on iPad,
  * beside it on iPhone), over the screen when there is none, and above the
@@ -25,6 +27,7 @@
 #include <pccore.h>
 #include <nevent.h>
 #include <fdd/diskdrv.h>
+#include <fdd/sxsi.h>
 #include <diskimage/fddfile.h>
 #include <kbtrans.h>
 #include <sysmenu.h>
@@ -44,6 +47,7 @@ static const CGFloat kGroupGap = 12;
 
 static NSString *const kHiddenKey = @"keybar_hidden";
 static NSString *const kFddDir = @"fdd";
+static NSString *const kHddDir = @"hdd";
 
 typedef NS_ENUM(NSInteger, KeyKind) {
 	KeyKindKey,			/* down while touched */
@@ -133,6 +137,60 @@ static NSString *fdd_name(REG8 drive)
 	return [NSString stringWithUTF8String:name].lastPathComponent;
 }
 
+static const struct {
+	REG8		drv;
+	const char	*label;
+} s_hddslots[] = {
+	{0x00, "IDE #1"},
+	{0x01, "IDE #2"},
+	{0x20, "SCSI #0"},
+	{0x21, "SCSI #1"},
+	{0x22, "SCSI #2"},
+	{0x23, "SCSI #3"},
+};
+
+static BOOL hdd_slot_available(REG8 drv)
+{
+	if (drv & 0x20) {
+		return TRUE;
+	}
+	/* IDE slots can be set up as CD-ROM drives instead */
+	return np2cfg.idetype[drv & 0x0f] == SXSIDEV_HDD;
+}
+
+static NSString *hdd_name(REG8 drv)
+{
+	const OEMCHAR *name = diskdrv_getsxsi(drv);
+	if (name == NULL || name[0] == '\0') {
+		return nil;
+	}
+	return [NSString stringWithUTF8String:name].lastPathComponent;
+}
+
+/* Saved to the config; the image is opened at the next reset. */
+static void set_hdd(REG8 drv, NSString *path)
+{
+	diskdrv_setsxsi(drv, path ? path.fileSystemRepresentation : NULL);
+	NSLog(@"keybar: HDD %02x <- %@", drv, path ?: @"(none)");
+}
+
+/* dir/name, or dir/name 2.ext ... if that exists (relative to dataDir) */
+static NSString *unique_path(NSString *dir, NSString *name, NSString *dataDir)
+{
+	NSFileManager *fm = [NSFileManager defaultManager];
+	NSString *path = [dir stringByAppendingPathComponent:name];
+	NSString *base = name.stringByDeletingPathExtension;
+	NSString *ext = name.pathExtension;
+	for (int n = 2; [fm fileExistsAtPath:[dataDir stringByAppendingPathComponent:path]]; n++) {
+		NSString *numbered = [NSString stringWithFormat:@"%@ %d", base, n];
+		if (ext.length) {
+			numbered = [numbered stringByAppendingPathExtension:ext];
+		}
+		path = [dir stringByAppendingPathComponent:numbered];
+	}
+	return path;
+}
+
 // ---- views
 
 static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard */
@@ -160,7 +218,8 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	NSMutableArray<NSNumber *> *_separatorBefore;	/* per key */
 	CGRect _keyboardFrame;							/* software keyboard, in window coordinates */
 	BOOL _softKeyboardShown;
-	REG8 _pickingDrive;
+	NSString *_pickDir;
+	void (^_pickHandler)(NSString *path);
 	BOOL _hidden;
 }
 
@@ -334,7 +393,9 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 			                                  identifier:nil
 			                                     handler:^(UIAction *action) {
 				(void)action;
-				[weakSelf pickDiskForDrive:drive];
+				[weakSelf pickFileInto:kFddDir handler:^(NSString *path) {
+					insert_fdd(drive, path);
+				}];
 			}];
 			insert.subtitle = name ?: @"空";
 			[items addObject:insert];
@@ -351,6 +412,9 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		}
 		completion(items);
 	}];
+	UIDeferredMenuElement *hdd = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+		completion(@[ [weakSelf hddMenu] ]);
+	}];
 	UIAction *reset = [UIAction actionWithTitle:@"リセット" image:[UIImage systemImageNamed:@"arrow.counterclockwise"]
 	                                identifier:nil handler:^(UIAction *action) {
 		(void)action;
@@ -363,9 +427,63 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		sysmenu_menuopen(0, 0, 0);
 	}];
 	return [UIMenu menuWithChildren:@[
-		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ fdd ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ fdd, hdd ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ np2menu, reset ]],
 	]];
+}
+
+/* One submenu per HDD slot: choose an image or remove it. Changes are
+ * written to the config and take effect at the next reset. */
+- (UIMenu *)hddMenu
+{
+	__weak NP2KeyBar *weakSelf = self;
+	NSMutableArray<UIMenuElement *> *slots = [NSMutableArray array];
+	for (size_t i = 0; i < NELEMENTS(s_hddslots); i++) {
+		REG8 drv = s_hddslots[i].drv;
+		if (!hdd_slot_available(drv)) {
+			continue;
+		}
+		NSString *name = hdd_name(drv);
+		NSString *label = [NSString stringWithUTF8String:s_hddslots[i].label];
+		NSMutableArray<UIMenuElement *> *actions = [NSMutableArray array];
+		[actions addObject:[UIAction actionWithTitle:@"イメージを選ぶ…" image:[UIImage systemImageNamed:@"folder"]
+		                                  identifier:nil handler:^(UIAction *action) {
+			(void)action;
+			[weakSelf pickFileInto:kHddDir handler:^(NSString *path) {
+				[weakSelf setHdd:drv path:path];
+			}];
+		}]];
+		if (name) {
+			UIAction *remove = [UIAction actionWithTitle:@"外す" image:[UIImage systemImageNamed:@"eject"]
+			                                  identifier:nil handler:^(UIAction *action) {
+				(void)action;
+				[weakSelf setHdd:drv path:nil];
+			}];
+			remove.attributes = UIMenuElementAttributesDestructive;
+			[actions addObject:remove];
+		}
+		UIMenu *slot = [UIMenu menuWithTitle:label image:nil identifier:nil options:0 children:actions];
+		slot.subtitle = name ?: @"なし";
+		[slots addObject:slot];
+	}
+	UIMenu *menu = [UIMenu menuWithTitle:@"ハードディスク" image:[UIImage systemImageNamed:@"internaldrive"]
+	                          identifier:nil options:0 children:slots];
+	menu.subtitle = @"リセット後に反映";
+	return menu;
+}
+
+- (void)setHdd:(REG8)drv path:(NSString *)path
+{
+	set_hdd(drv, path);
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"ハードディスクを変更しました"
+	                                                               message:@"リセットすると反映されます。今すぐリセットしますか？保存していないデータは失われます。"
+	                                                        preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"あとで" style:UIAlertActionStyleCancel handler:nil]];
+	[alert addAction:[UIAlertAction actionWithTitle:@"リセット" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+		(void)action;
+		reset_machine();
+	}]];
+	[[self hostController] presentViewController:alert animated:YES completion:nil];
 }
 
 - (UIViewController *)hostController
@@ -390,9 +508,21 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	[[self hostController] presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)pickDiskForDrive:(REG8)drive
+- (void)showError:(NSString *)message
 {
-	_pickingDrive = drive;
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"ディスクを読み込めません"
+	                                                               message:message
+	                                                        preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+	[[self hostController] presentViewController:alert animated:YES completion:nil];
+}
+
+/* Lets the user pick a disk image in the Files app. The handler gets a path
+ * relative to the data directory (the current directory). */
+- (void)pickFileInto:(NSString *)dir handler:(void (^)(NSString *path))handler
+{
+	_pickDir = dir;
+	_pickHandler = handler;
 	UIDocumentPickerViewController *picker =
 		[[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[ UTTypeData ] asCopy:NO];
 	picker.delegate = self;
@@ -400,58 +530,76 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	[[self hostController] presentViewController:picker animated:YES completion:nil];
 }
 
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller
+{
+	(void)controller;
+	_pickHandler = nil;
+}
+
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
 {
 	(void)controller;
 	NSURL *url = urls.firstObject;
-	if (url == nil) {
+	void (^handler)(NSString *) = _pickHandler;
+	_pickHandler = nil;
+	if (url == nil || handler == nil) {
 		return;
 	}
-	NSString *path = [self localPathForPickedURL:url];
-	if (path) {
-		insert_fdd(_pickingDrive, path);
-	}
-}
 
-/* Files inside the app's data directory are used in place; others (iCloud,
- * other apps) are copied into fdd/ so that they stay usable and writable.
- * Returns a path relative to the data directory (the current directory). */
-- (NSString *)localPathForPickedURL:(NSURL *)url
-{
-	NSFileManager *fm = [NSFileManager defaultManager];
-	NSString *dataDir = [fm.currentDirectoryPath stringByResolvingSymlinksInPath];
+	/* Files inside the app's data directory are used in place. */
+	NSString *dataDir = [[NSFileManager defaultManager].currentDirectoryPath stringByResolvingSymlinksInPath];
 	NSString *picked = [url.path stringByResolvingSymlinksInPath];
 	if ([picked hasPrefix:[dataDir stringByAppendingString:@"/"]]) {
-		return [picked substringFromIndex:dataDir.length + 1];
+		handler([picked substringFromIndex:dataDir.length + 1]);
+		return;
 	}
+	[self importURL:url into:_pickDir handler:handler];
+}
 
-	BOOL scoped = [url startAccessingSecurityScopedResource];
-	[fm createDirectoryAtPath:kFddDir withIntermediateDirectories:YES attributes:nil error:nil];
-	NSString *dest = [kFddDir stringByAppendingPathComponent:url.lastPathComponent];
-	NSError *error = nil;
-	NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
-	__block BOOL copied = NO;
-	[coordinator coordinateReadingItemAtURL:url options:NSFileCoordinatorReadingWithoutChanges error:&error byAccessor:^(NSURL *readURL) {
-		NSError *copyError = nil;
-		[fm removeItemAtPath:dest error:nil];
-		copied = [fm copyItemAtPath:readURL.path toPath:dest error:&copyError];
-		if (!copied) {
-			NSLog(@"keybar: copy failed: %@", copyError);
+/* Others (iCloud, other apps) are copied into dir/ so that they stay usable
+ * and writable. Hard disk images can be large, so this runs in the
+ * background behind a progress alert. An existing file is never replaced. */
+- (void)importURL:(NSURL *)url into:(NSString *)dir handler:(void (^)(NSString *path))handler
+{
+	UIAlertController *progress = [UIAlertController alertControllerWithTitle:@"コピーしています…"
+	                                                                  message:url.lastPathComponent
+	                                                           preferredStyle:UIAlertControllerStyleAlert];
+	[[self hostController] presentViewController:progress animated:YES completion:nil];
+
+	NSString *dataDir = [NSFileManager defaultManager].currentDirectoryPath;
+	__weak NP2KeyBar *weakSelf = self;
+	dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+		NSFileManager *fm = [NSFileManager defaultManager];
+		NSString *dest = unique_path(dir, url.lastPathComponent, dataDir);
+		[fm createDirectoryAtPath:[dataDir stringByAppendingPathComponent:dir] withIntermediateDirectories:YES attributes:nil error:nil];
+
+		BOOL scoped = [url startAccessingSecurityScopedResource];
+		__block NSError *error = nil;
+		NSError *coordinateError = nil;
+		NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+		[coordinator coordinateReadingItemAtURL:url options:NSFileCoordinatorReadingWithoutChanges error:&coordinateError byAccessor:^(NSURL *readURL) {
+			NSError *copyError = nil;
+			if (![fm copyItemAtPath:readURL.path toPath:[dataDir stringByAppendingPathComponent:dest] error:&copyError]) {
+				error = copyError;
+			}
+		}];
+		if (scoped) {
+			[url stopAccessingSecurityScopedResource];
 		}
-	}];
-	if (scoped) {
-		[url stopAccessingSecurityScopedResource];
-	}
-	if (!copied) {
-		NSString *message = error.localizedDescription ?: @"ファイルをコピーできませんでした。";
-		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"ディスクを読み込めません"
-		                                                               message:message
-		                                                        preferredStyle:UIAlertControllerStyleAlert];
-		[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-		[[self hostController] presentViewController:alert animated:YES completion:nil];
-		return nil;
-	}
-	return dest;
+		error = error ?: coordinateError;
+
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[progress dismissViewControllerAnimated:YES completion:^{
+				if (error) {
+					NSLog(@"keybar: copy failed: %@", error);
+					[weakSelf showError:error.localizedDescription];
+				}
+				else {
+					handler(dest);
+				}
+			}];
+		});
+	});
 }
 
 // ---- show / hide
@@ -603,6 +751,31 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	}
 	else if ([command isEqualToString:@"!eject1"] || [command isEqualToString:@"!eject2"]) {
 		diskdrv_setfdd((REG8)([command characterAtIndex:6] - '1'), NULL, 0);
+	}
+	else if ([command hasPrefix:@"!importhdd"] && command.length > 13) {
+		/* "!importhdd20:<absolute path>": as if picked outside the data directory */
+		REG8 drv = (REG8)strtol([command substringWithRange:NSMakeRange(10, 2)].UTF8String, NULL, 16);
+		__weak NP2KeyBar *weakSelf = self;
+		[self importURL:[NSURL fileURLWithPath:[command substringFromIndex:13]] into:kHddDir handler:^(NSString *path) {
+			[weakSelf setHdd:drv path:path];
+		}];
+	}
+	else if ([command hasPrefix:@"!hdd"] && command.length >= 6) {
+		/* "!hdd20:<path>" sets SCSI #0, "!hdd20" removes it */
+		REG8 drv = (REG8)strtol([command substringWithRange:NSMakeRange(4, 2)].UTF8String, NULL, 16);
+		NSString *path = (command.length > 7) ? [command substringFromIndex:7] : nil;
+		set_hdd(drv, path);
+	}
+	else if ([command isEqualToString:@"!dumphddmenu"]) {
+		UIMenu *menu = [self hddMenu];
+		NSLog(@"keybar: menu %@ (%@)", menu.title, menu.subtitle);
+		for (UIMenuElement *slot in menu.children) {
+			NSMutableArray *titles = [NSMutableArray array];
+			for (UIMenuElement *item in ((UIMenu *)slot).children) {
+				[titles addObject:item.title];
+			}
+			NSLog(@"keybar:   %@ = %@ [%@]", slot.title, slot.subtitle, [titles componentsJoinedByString:@", "]);
+		}
 	}
 	else if ([command isEqualToString:@"!reset"]) {
 		reset_machine();
