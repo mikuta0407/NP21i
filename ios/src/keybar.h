@@ -31,7 +31,8 @@ void keybar_sethdd(unsigned char drv, const char *path);
  * "!importhdd<drv>:<absolute path>" (copy into hdd/ as if picked elsewhere),
  * "!dumphddmenu" (log the hard disk menu), "!settings", "!guide",
  * "!dismiss" (close what is presented), "!tap:<row title>" (on the settings screen),
- * "!newdisk:<index>:<MB>" (as on the new disk screen). */
+ * "!newdisk:<index>:<MB>" (as on the new disk screen),
+ * "!orient:portrait" / "!orient:landscape", "!showmenu" (open the ≡ menu). */
 void keybar_debugcommand(const char *command);
 
 #ifdef __cplusplus

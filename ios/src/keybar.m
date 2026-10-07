@@ -886,6 +886,22 @@ static void setup_text_field(UIViewController *controller);
 		NSArray<NSString *> *args = [[command substringFromIndex:9] componentsSeparatedByString:@":"];
 		settingsview_debugnewdisk(args[0].intValue, (unsigned int)args.lastObject.intValue);
 	}
+	else if ([command hasPrefix:@"!orient:"]) {
+		/* "!orient:portrait" / "!orient:landscape" */
+		if (@available(iOS 16.0, *)) {
+			BOOL portrait = [command hasSuffix:@"portrait"];
+			UIWindowSceneGeometryPreferencesIOS *prefs = [[UIWindowSceneGeometryPreferencesIOS alloc]
+				initWithInterfaceOrientations:portrait ? UIInterfaceOrientationMaskPortrait : UIInterfaceOrientationMaskLandscapeRight];
+			[self.window.windowScene requestGeometryUpdateWithPreferences:prefs errorHandler:^(NSError *error) {
+				NSLog(@"keybar: orientation request failed: %@", error);
+			}];
+		}
+	}
+	else if ([command isEqualToString:@"!showmenu"]) {
+		if (@available(iOS 17.4, *)) {
+			[_menuButton performPrimaryAction];
+		}
+	}
 	else if ([command hasPrefix:@"!tap:"]) {
 		settingsview_debugtap([command substringFromIndex:5].UTF8String);
 	}
