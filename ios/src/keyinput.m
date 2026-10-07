@@ -21,7 +21,6 @@
 #include "keyinput.h"
 
 #import <Foundation/Foundation.h>
-#import <GameController/GameController.h>
 #include <SDL2/SDL.h>
 #include <keystat.h>
 #include <kbtrans.h>
@@ -108,8 +107,10 @@ static BOOL convert_us(void)
 		return TRUE;
 	}
 	/* The software keyboard: SDL sends US key positions for its characters.
-	 * (SDL_IsTextInputActive() is no help: SDL enables text input at start.) */
-	return s_softkeyboard && GCKeyboard.coalescedKeyboard == nil;
+	 * (SDL_IsTextInputActive() is no help: SDL enables text input at start,
+	 * and GCKeyboard can report a keyboard while the software one is used,
+	 * e.g. the Mac's in the simulator.) */
+	return s_softkeyboard;
 }
 
 static void converted_down(SDL_Scancode sc, UINT8 key)

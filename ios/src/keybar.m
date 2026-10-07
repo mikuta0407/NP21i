@@ -689,7 +689,9 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 {
 	_keyboardFrame = [note.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
 	_softKeyboardShown = CGRectGetMinY(_keyboardFrame) < CGRectGetMaxY(UIScreen.mainScreen.bounds);
-	keyinput_setsoftkeyboard(_softKeyboardShown);
+	/* With a hardware keyboard iOS shows only a thin shortcut bar; keys
+	 * typed on a full software keyboard arrive as US positions. */
+	keyinput_setsoftkeyboard(_softKeyboardShown && CGRectGetHeight(_keyboardFrame) > 150);
 	[self setNeedsLayout];
 }
 
@@ -726,7 +728,12 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	/* Wide screens (iPad) leave little room below; make SDL leave a band
 	 * for the bar, shrinking the screen a little. */
 	int pad = 0;
-	if (!_hidden && sideGap < kMinSideWidth) {
+	if (!_hidden && viewH > viewW) {
+		/* portrait (iPad): screen at the top, the bar and the software
+		 * keyboard below it */
+		pad = MAX(0, (int)((viewH - 2 * safe.top) / (viewW / sw)) - sh);
+	}
+	else if (!_hidden && sideGap < kMinSideWidth) {
 		int maxpad = sh / 8;
 		for (pad = 0; pad < maxpad; pad++) {
 			CGFloat s = MIN(viewW / sw, viewH / (sh + pad));

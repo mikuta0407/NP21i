@@ -8,6 +8,7 @@
  */
 
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_main.h>
 #include <stdlib.h>
@@ -36,6 +37,15 @@ int SDL_main(int argc, char *argv[])
 	}
 	/* The key bar sits at the bottom edge: keep the home indicator out of the way. */
 	SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");
+	/* Without this SDL locks the orientation to landscape (the window is
+	 * wider than tall). iPadOS 26+ requires iPad apps to support every
+	 * orientation and would show the landscape content rotated. */
+	if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+		SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait PortraitUpsideDown");
+	}
+	else {
+		SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+	}
 	settings_initialize();
 	midiport_initialize();
 	debugmidi_start();
