@@ -9,6 +9,9 @@
  *
  * Pass it through simctl with the SIMCTL_CHILD_ prefix:
  *   SIMCTL_CHILD_NP2_DEBUG_KEYS="..." xcrun simctl launch <udid> <bundle id>
+ *
+ * While the app runs, a script written to debugkeys.txt in the data directory
+ * is also executed (same format) and the file is deleted.
  */
 
 #include "debugkeys.h"
@@ -36,9 +39,8 @@ static void push_key(SDL_Scancode sc, BOOL down)
 	SDL_PushEvent(&e);
 }
 
-static void *debugkeys_thread(void *arg)
+static void run_script(char *script)
 {
-	char *script = arg;
 	char *saveptr = NULL;
 
 	for (char *step = strtok_r(script, ",", &saveptr); step; step = strtok_r(NULL, ",", &saveptr)) {
@@ -73,18 +75,39 @@ static void *debugkeys_thread(void *arg)
 		}
 		fprintf(stderr, "debugkeys: sent %s\n", label);
 	}
-	free(script);
+}
+
+static void *debugkeys_thread(void *arg)
+{
+	char *script = arg;
+
+	if (script) {
+		run_script(script);
+		free(script);
+	}
+	/* cwd is the data directory (see main.m) */
+	for (;;) {
+		usleep(300 * 1000);
+		FILE *fp = fopen("debugkeys.txt", "r");
+		if (!fp) {
+			continue;
+		}
+		char buf[4096];
+		size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+		fclose(fp);
+		remove("debugkeys.txt");
+		buf[n] = '\0';
+		buf[strcspn(buf, "\r\n")] = '\0';
+		run_script(buf);
+	}
 	return NULL;
 }
 
 void debugkeys_start(void)
 {
 	const char *script = getenv("NP2_DEBUG_KEYS");
-	if (!script || !script[0]) {
-		return;
-	}
 	pthread_t th;
-	if (pthread_create(&th, NULL, debugkeys_thread, strdup(script)) == 0) {
+	if (pthread_create(&th, NULL, debugkeys_thread, (script && script[0]) ? strdup(script) : NULL) == 0) {
 		pthread_detach(th);
 	}
 }

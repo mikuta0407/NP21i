@@ -148,6 +148,8 @@ file(GLOB _np2_glob_flat
 )
 list(APPEND NP2_SOURCES ${_np2_glob} ${_np2_glob_flat})
 list(FILTER NP2_SOURCES EXCLUDE REGEX "/wab/tgui9680")
+# Replaced by the iOS layer (CoreMIDI).
+list(FILTER NP2_SOURCES EXCLUDE REGEX "/sdl/cmmidi\\.c$")
 # fontmng.c is compiled as-is; SDL_ttf is satisfied by a stub header (ios/shim)
 # until a CoreText based font manager replaces it.
 
@@ -155,6 +157,10 @@ list(FILTER NP2_SOURCES EXCLUDE REGEX "/wab/tgui9680")
 set(IOS_SOURCES
 	${IOS_DIR}/src/main.m
 	${IOS_DIR}/src/debugkeys.m
+	${IOS_DIR}/src/debugmidi.m
+	${IOS_DIR}/src/cmmidi.c
+	${IOS_DIR}/src/midiport.m
+	${IOS_DIR}/src/settings.m
 )
 
 add_executable(NP21iOS MACOSX_BUNDLE ${NP2_SOURCES} ${IOS_SOURCES})
@@ -194,9 +200,17 @@ target_compile_options(NP21iOS PRIVATE
 	$<$<COMPILE_LANGUAGE:C>:-include compiler.h>
 )
 # Upstream code is noisy; keep warnings for the iOS layer only.
-set_source_files_properties(${NP2_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-everything")
+# The emulator core is always optimized: at -O0 it cannot keep real time,
+# which makes the main loop run frames in bursts and ruins MIDI timing.
+set_source_files_properties(${NP2_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-everything;-O2")
 
-target_link_libraries(NP21iOS PRIVATE SDL2::SDL2main SDL2::SDL2-static)
+target_link_libraries(NP21iOS PRIVATE SDL2::SDL2main SDL2::SDL2-static "-framework CoreMIDI")
+
+# Settings app entries (copied as a folder; CodeSign runs after this step).
+add_custom_command(TARGET NP21iOS POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_directory
+		"${IOS_DIR}/Settings.bundle" "$<TARGET_BUNDLE_DIR:NP21iOS>/Settings.bundle"
+)
 
 set_target_properties(NP21iOS PROPERTIES
 	MACOSX_BUNDLE_INFO_PLIST "${IOS_DIR}/Info.plist"

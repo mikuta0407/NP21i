@@ -13,7 +13,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "compiler.h"
 #include "debugkeys.h"
+#include "debugmidi.h"
+#include "midiport.h"
+#include "settings.h"
 
 extern int np2_main(int argc, char *argv[]);
 
@@ -29,6 +33,9 @@ int SDL_main(int argc, char *argv[])
 		 * given relative to the data directory. */
 		chdir(dataDir.fileSystemRepresentation);
 	}
+	settings_initialize();
+	midiport_initialize();
+	debugmidi_start();
 	debugkeys_start();
 	return np2_main(argc, argv);
 }
