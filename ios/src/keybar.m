@@ -37,7 +37,7 @@ enum {
 static const CGFloat kMinBarHeight = 30;
 static const CGFloat kMaxBarHeight = 44;
 static const CGFloat kOverlayBarHeight = 40;
-static const CGFloat kMinSideWidth = 56;
+static const CGFloat kMinSideWidth = 44;
 static const CGFloat kMaxSideWidth = 76;
 static const CGFloat kGap = 4;
 static const CGFloat kGroupGap = 12;
@@ -577,10 +577,10 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 {
 	CGFloat w = size.width - kGap * 2;
 	CGFloat h = 34;
-	_menuButton.frame = CGRectMake(kGap, kGap, w / 2, h);
-	_softkbdButton.frame = CGRectMake(kGap + w / 2, kGap, w / 2, h);
+	_menuButton.frame = CGRectMake(kGap, kGap, w, h);
+	_softkbdButton.frame = CGRectMake(kGap, kGap + h, w, h);
 	_hideButton.frame = CGRectMake(kGap, size.height - kGap - h, w, h);
-	CGFloat top = CGRectGetMaxY(_menuButton.frame) + kGap;
+	CGFloat top = CGRectGetMaxY(_softkbdButton.frame) + kGap;
 	_scroll.frame = CGRectMake(0, top, size.width, CGRectGetMinY(_hideButton.frame) - kGap - top);
 
 	CGFloat y = 0;
