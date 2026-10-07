@@ -302,40 +302,61 @@ typedef NS_ENUM(NSInteger, CapState) {
 	return _layout.blocks;
 }
 
-- (CGFloat)rowUnitHeightForWidth:(CGFloat)width maxHeight:(CGFloat)maxHeight rows:(CGFloat *)rowsOut
+/* Height of a row of height 1 for these blocks shown together: in
+ * proportion to the key width, lower when it would not fit maxHeight. */
+- (CGFloat)rowUnitHeightForBlocks:(NSArray<NP2KeyBlock *> *)blocks width:(CGFloat)width maxHeight:(CGFloat)maxHeight
 {
-	NSArray<NP2KeyBlock *> *blocks = [self visibleBlocksForWidth:width];
 	CGFloat unit = (width - kPadding * 2) / [self unitsForBlocks:blocks];
-	CGFloat rows = 0;
-	NSUInteger rowCount = 0;
-	for (NP2KeyBlock *block in blocks) {
-		rows = MAX(rows, block.height);
-		rowCount = MAX(rowCount, block.rows.count);
-	}
-	CGFloat fixed = kPadding * 2 + kKeyGap * (CGFloat)(rowCount - 1) + ([self pagedForWidth:width] ? kTabsHeight + kKeyGap : 0);
 	CGFloat height = MIN(MAX(unit * 1.3, 36), kMaxRowHeight);
+	CGFloat fixed = [self fixedHeightForBlocks:blocks width:width];
+	CGFloat rows = [self rowsOfBlocks:blocks];
 	if (fixed + height * rows > maxHeight) {
 		height = MAX((maxHeight - fixed) / rows, kMinRowHeight);
-	}
-	if (rowsOut) {
-		*rowsOut = rows;
 	}
 	return floor(height);
 }
 
+/* in row units */
+- (CGFloat)rowsOfBlocks:(NSArray<NP2KeyBlock *> *)blocks
+{
+	CGFloat rows = 0;
+	for (NP2KeyBlock *block in blocks) {
+		rows = MAX(rows, block.height);
+	}
+	return rows;
+}
+
+/* padding, gaps between rows and the tabs */
+- (CGFloat)fixedHeightForBlocks:(NSArray<NP2KeyBlock *> *)blocks width:(CGFloat)width
+{
+	NSUInteger rowCount = 0;
+	for (NP2KeyBlock *block in blocks) {
+		rowCount = MAX(rowCount, block.rows.count);
+	}
+	return kPadding * 2 + kKeyGap * (CGFloat)(rowCount - 1) + ([self pagedForWidth:width] ? kTabsHeight + kKeyGap : 0);
+}
+
+- (CGFloat)heightOfBlocks:(NSArray<NP2KeyBlock *> *)blocks width:(CGFloat)width maxHeight:(CGFloat)maxHeight
+{
+	CGFloat rowHeight = [self rowUnitHeightForBlocks:blocks width:width maxHeight:maxHeight];
+	return ceil([self fixedHeightForBlocks:blocks width:width] + rowHeight * [self rowsOfBlocks:blocks]);
+}
+
+/* Shown one at a time, the blocks get the height of the tallest, so that
+ * switching tabs does not change it; a lower block leaves space below. */
 - (CGFloat)heightForWidth:(CGFloat)width maxHeight:(CGFloat)maxHeight
 {
 	if (_layout == nil || width <= 0) {
 		return 0;
 	}
-	CGFloat rows = 0;
-	CGFloat rowHeight = [self rowUnitHeightForWidth:width maxHeight:maxHeight rows:&rows];
-	NSUInteger rowCount = 0;
-	for (NP2KeyBlock *block in [self visibleBlocksForWidth:width]) {
-		rowCount = MAX(rowCount, block.rows.count);
+	if (![self pagedForWidth:width]) {
+		return [self heightOfBlocks:_layout.blocks width:width maxHeight:maxHeight];
 	}
-	return ceil(kPadding * 2 + kKeyGap * (CGFloat)(rowCount - 1) + rowHeight * rows
-		+ ([self pagedForWidth:width] ? kTabsHeight + kKeyGap : 0));
+	CGFloat height = 0;
+	for (NP2KeyBlock *block in _layout.blocks) {
+		height = MAX(height, [self heightOfBlocks:@[ block ] width:width maxHeight:maxHeight]);
+	}
+	return height;
 }
 
 - (void)layoutSubviews
@@ -350,7 +371,7 @@ typedef NS_ENUM(NSInteger, CapState) {
 	}
 	BOOL paged = [self pagedForWidth:width];
 	NSArray<NP2KeyBlock *> *blocks = [self visibleBlocksForWidth:width];
-	CGFloat rowHeight = [self rowUnitHeightForWidth:width maxHeight:area.size.height rows:NULL];
+	CGFloat rowHeight = [self rowUnitHeightForBlocks:blocks width:width maxHeight:area.size.height];
 	CGFloat unit = (width - kPadding * 2) / [self unitsForBlocks:blocks];
 
 	CGFloat top = area.origin.y + kPadding;
