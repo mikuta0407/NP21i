@@ -1,0 +1,20 @@
+diff --git a/pccore.c b/pccore.c
+index 4145861..a1d7a34 100644
+--- a/pccore.c
++++ b/pccore.c
+@@ -212,6 +212,7 @@ NP2CFG np2cfg = {
+     64,
+     64,
+     64,
++    128,
+ #endif /* SUPPORT_FMGEN */
+     1,
+     0x82,
+@@ -692,6 +693,7 @@ void pccore_setdefault(void) {
+       64,
+       64,
+       64,
++      128,
+ #endif
+       1,
+       0x82,

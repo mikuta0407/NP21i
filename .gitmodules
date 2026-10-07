@@ -1,0 +1,7 @@
+[submodule "vendor/NP2kai"]
+	path = vendor/NP2kai
+	url = https://github.com/AZO234/NP2kai.git
+[submodule "vendor/SDL"]
+	path = vendor/SDL
+	url = https://github.com/libsdl-org/SDL.git
+	branch = release-2.32.x

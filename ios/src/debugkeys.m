@@ -1,0 +1,98 @@
+/**
+ * @file	debugkeys.m
+ * @brief	Scripted key input for testing on a headless simulator (debug builds only)
+ *
+ * NP2_DEBUG_KEYS="<delay ms>:<key>[+<key>...],..."
+ * Each step waits <delay ms>, then presses the keys in order and releases them
+ * in reverse. Key names are SDL scancode names (SDL_GetScancodeFromName),
+ * e.g. "3000:F10,500:Down,500:Return,1000:Left Shift+F9".
+ *
+ * Pass it through simctl with the SIMCTL_CHILD_ prefix:
+ *   SIMCTL_CHILD_NP2_DEBUG_KEYS="..." xcrun simctl launch <udid> <bundle id>
+ */
+
+#include "debugkeys.h"
+
+#ifndef NDEBUG
+
+#include <SDL2/SDL.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#define MAX_COMBO 4
+#define HOLD_MS 80
+
+static void push_key(SDL_Scancode sc, BOOL down)
+{
+	SDL_Event e;
+	SDL_zero(e);
+	e.type = down ? SDL_KEYDOWN : SDL_KEYUP;
+	e.key.state = down ? SDL_PRESSED : SDL_RELEASED;
+	e.key.keysym.scancode = sc;
+	e.key.keysym.sym = SDL_GetKeyFromScancode(sc);
+	SDL_PushEvent(&e);
+}
+
+static void *debugkeys_thread(void *arg)
+{
+	char *script = arg;
+	char *saveptr = NULL;
+
+	for (char *step = strtok_r(script, ",", &saveptr); step; step = strtok_r(NULL, ",", &saveptr)) {
+		char *colon = strchr(step, ':');
+		if (!colon) {
+			fprintf(stderr, "debugkeys: bad step '%s'\n", step);
+			continue;
+		}
+		*colon = '\0';
+		usleep((useconds_t)atoi(step) * 1000);
+		char label[128];
+		SDL_strlcpy(label, colon + 1, sizeof(label));
+
+		SDL_Scancode combo[MAX_COMBO];
+		int count = 0;
+		char *keyptr = NULL;
+		for (char *name = strtok_r(colon + 1, "+", &keyptr); name && count < MAX_COMBO; name = strtok_r(NULL, "+", &keyptr)) {
+			SDL_Scancode sc = SDL_GetScancodeFromName(name);
+			if (sc == SDL_SCANCODE_UNKNOWN) {
+				fprintf(stderr, "debugkeys: unknown key '%s'\n", name);
+				continue;
+			}
+			combo[count++] = sc;
+		}
+		for (int i = 0; i < count; i++) {
+			push_key(combo[i], TRUE);
+			usleep(HOLD_MS * 1000);
+		}
+		for (int i = count - 1; i >= 0; i--) {
+			push_key(combo[i], FALSE);
+			usleep(HOLD_MS * 1000);
+		}
+		fprintf(stderr, "debugkeys: sent %s\n", label);
+	}
+	free(script);
+	return NULL;
+}
+
+void debugkeys_start(void)
+{
+	const char *script = getenv("NP2_DEBUG_KEYS");
+	if (!script || !script[0]) {
+		return;
+	}
+	pthread_t th;
+	if (pthread_create(&th, NULL, debugkeys_thread, strdup(script)) == 0) {
+		pthread_detach(th);
+	}
+}
+
+#else
+
+void debugkeys_start(void)
+{
+}
+
+#endif
