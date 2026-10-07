@@ -1,0 +1,21 @@
+diff --git a/src/render/metal/SDL_render_metal.m b/src/render/metal/SDL_render_metal.m
+index 94c085ce2..0f0029c76 100644
+--- a/src/render/metal/SDL_render_metal.m
++++ b/src/render/metal/SDL_render_metal.m
+@@ -2414,12 +2414,16 @@ in case we want to use it later (recreating the renderer)
+         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA64_FLOAT);
+         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA128_FLOAT);
+         if (@available(macOS 11.0, iOS 13.0, tvOS 13.0, *)) {
++            /* The iOS Simulator reports the Apple GPU family of the host Mac
++             * but rejects the packed 16-bit pixel formats; let SDL convert. */
++#if !TARGET_OS_SIMULATOR
+             if ([mtldevice supportsFamily:MTLGPUFamilyApple1]) {
+                 SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
+                 SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA5551);
+                 SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB1555);
+                 SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA4444);
+             }
++#endif
+         }
+         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_INDEX8);
+         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_YV12);

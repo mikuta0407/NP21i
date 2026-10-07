@@ -2,15 +2,20 @@
  * @file	main.m
  * @brief	iOS entry point
  *
- * SDL2 provides the real main() (UIApplicationMain) and calls SDL_main().
+ * SDL_main.h renames this main() to SDL_main(); SDL provides the real main()
+ * (UIApplicationMain) and calls it once the app has launched.
  * The emulator keeps its data (BIOS, fonts, disk images, np2kai.cfg) under
  * Documents/sdlnp21kai/ so that the Files app can access it.
  */
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#include <SDL2/SDL.h>
+#include "sdlcompat.h"
+#if USE_SDL >= 3
+#include <SDL3/SDL_main.h>
+#else
 #include <SDL2/SDL_main.h>
+#endif
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -23,7 +28,7 @@
 
 extern int np2_main(int argc, char *argv[]);
 
-int SDL_main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	@autoreleasepool {
 		NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;

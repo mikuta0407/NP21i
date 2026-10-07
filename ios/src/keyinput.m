@@ -21,7 +21,7 @@
 #include "keyinput.h"
 
 #import <Foundation/Foundation.h>
-#include <SDL2/SDL.h>
+#include "sdlcompat.h"
 #include <keystat.h>
 #include <kbtrans.h>
 
@@ -60,8 +60,8 @@ static const struct {
 static int s_layout = KEYLAYOUT_JIS;
 static BOOL s_softkeyboard;
 static BOOL s_shiftheld[2];					/* physical left / right SHIFT */
-static UINT8 s_converted[SDL_NUM_SCANCODES];	/* PC-98 key sent for a converted key, 0 = none */
-static int s_shiftadjust[SDL_NUM_SCANCODES];	/* +1 SHIFT pressed / -1 released for it */
+static UINT8 s_converted[NP21_NUM_SCANCODES];	/* PC-98 key sent for a converted key, 0 = none */
+static int s_shiftadjust[NP21_NUM_SCANCODES];	/* +1 SHIFT pressed / -1 released for it */
 static BOOL s_latched[0x80];				/* on-screen modifiers */
 
 static void changed(void)
@@ -178,21 +178,21 @@ static void handle_key(SDL_Scancode sc, BOOL down)
 /* sdl/taskmng.c keeps these: F11 opens the menu, Cmd+F toggles fullscreen. */
 static BOOL taskmng_handles(const SDL_KeyboardEvent *key)
 {
-	return key->keysym.scancode == SDL_SCANCODE_F11 || (key->keysym.mod & KMOD_GUI);
+	return NP21_KEY_SCANCODE(key) == SDL_SCANCODE_F11 || (NP21_KEY_MOD(key) & NP21_KMOD_GUI);
 }
 
-static int SDLCALL event_filter(void *userdata, SDL_Event *event)
+static NP21_FILTERRESULT SDLCALL event_filter(void *userdata, SDL_Event *event)
 {
 	(void)userdata;
-	if (event->type != SDL_KEYDOWN && event->type != SDL_KEYUP) {
+	if (event->type != NP21_EVENT_KEYDOWN && event->type != NP21_EVENT_KEYUP) {
 		return 1;
 	}
 	if (taskmng_handles(&event->key)) {
 		return 1;
 	}
-	SDL_Scancode sc = event->key.keysym.scancode;
-	BOOL down = (event->type == SDL_KEYDOWN);
-	if ((UINT)sc >= SDL_NUM_SCANCODES) {
+	SDL_Scancode sc = NP21_KEY_SCANCODE(&event->key);
+	BOOL down = (event->type == NP21_EVENT_KEYDOWN);
+	if ((UINT)sc >= NP21_NUM_SCANCODES) {
 		return 0;
 	}
 	if ([NSThread isMainThread]) {

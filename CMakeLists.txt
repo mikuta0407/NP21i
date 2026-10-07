@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.24)
 # iOS / iPadOS port of Neko Project II kai (np21/w based).
 # Configure with:
 #   cmake -S . -B build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS
+# NP21_SDL selects SDL2 (vendor/SDL, default) or SDL3 (vendor/SDL3):
+#   cmake -S . -B build/ios3 -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DNP21_SDL=3
 project(NP21iOS LANGUAGES C CXX OBJC)
 
 set(CMAKE_C_STANDARD 11)
@@ -10,18 +12,31 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "")
 
 set(NP2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/NP2kai")
-set(SDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/SDL")
+set(NP21_SDL "2" CACHE STRING "SDL major version: 2 or 3")
+if(NP21_SDL EQUAL 3)
+	set(SDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/SDL3")
+else()
+	set(SDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/SDL")
+endif()
 set(IOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ios")
 
-# ---- SDL2 (zlib license) -------------------------------------------------
+# ---- SDL (zlib license) --------------------------------------------------
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_TEST OFF CACHE BOOL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 add_subdirectory("${SDL_DIR}" "${CMAKE_BINARY_DIR}/SDL" EXCLUDE_FROM_ALL)
-# NP2kai includes <SDL2/SDL.h>; expose the SDL headers under that prefix.
-set(SDL2_COMPAT_INCLUDE "${CMAKE_BINARY_DIR}/sdl2-include")
-file(MAKE_DIRECTORY "${SDL2_COMPAT_INCLUDE}")
-file(CREATE_LINK "${SDL_DIR}/include" "${SDL2_COMPAT_INCLUDE}/SDL2" SYMBOLIC)
+if(NP21_SDL EQUAL 3)
+	# <SDL3/SDL.h> is the layout of SDL3's own include directory
+	set(SDL2_COMPAT_INCLUDE "${SDL_DIR}/include")
+	set(SDL_LIBRARIES SDL3::SDL3-static)
+else()
+	# NP2kai includes <SDL2/SDL.h>; expose the SDL headers under that prefix.
+	set(SDL2_COMPAT_INCLUDE "${CMAKE_BINARY_DIR}/sdl2-include")
+	file(MAKE_DIRECTORY "${SDL2_COMPAT_INCLUDE}")
+	file(CREATE_LINK "${SDL_DIR}/include" "${SDL2_COMPAT_INCLUDE}/SDL2" SYMBOLIC)
+	set(SDL_LIBRARIES SDL2::SDL2main SDL2::SDL2-static)
+endif()
 
 # ---- NP2kai sources ------------------------------------------------------
 # License policy: only modified-BSD / MIT / zlib code is built.
@@ -201,7 +216,7 @@ target_compile_definitions(NP21iOS PRIVATE
 	SUPPORT_MPU98_TICK_MIDIIN
 	# patch 0003: the on-screen key bar shows the software keyboard instead of screen taps
 	NP2_IOS_KEYBAR
-	NP2_SDL SUPPORT_BMS USE_SDL=2 OSLINEBREAK_LF SUPPORT_SDL_AUDIO
+	NP2_SDL SUPPORT_BMS USE_SDL=${NP21_SDL} OSLINEBREAK_LF SUPPORT_SDL_AUDIO
 	SUPPORT_NP2_TICKCOUNT SUPPORT_NP2_THREAD SUPPORT_PTHREAD
 	NP2KAI_GIT_TAG="ios" NP2KAI_GIT_HASH="dev"
 )
@@ -214,7 +229,7 @@ target_compile_options(NP21iOS PRIVATE
 # which makes the main loop run frames in bursts and ruins MIDI timing.
 set_source_files_properties(${NP2_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-everything;-O2")
 
-target_link_libraries(NP21iOS PRIVATE SDL2::SDL2main SDL2::SDL2-static "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers" "-framework CoreAudioKit")
+target_link_libraries(NP21iOS PRIVATE ${SDL_LIBRARIES} "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers" "-framework CoreAudioKit")
 
 # Settings app entries (copied as a folder; CodeSign runs after this step).
 add_custom_command(TARGET NP21iOS POST_BUILD
