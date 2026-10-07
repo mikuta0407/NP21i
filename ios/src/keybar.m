@@ -19,6 +19,9 @@
 #include "compiler.h"
 #include "keybar.h"
 #include "keyinput.h"
+#include "lifecycle.h"
+#include "settings.h"
+#include "settingsview.h"
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -205,6 +208,9 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 
 @interface NP2KeyBar : UIView <UIDocumentPickerDelegate>
 - (void)refreshModifiers;
+- (UIViewController *)hostController;
+- (void)pickFileInto:(NSString *)dir handler:(void (^)(NSString *path))handler;
+- (void)setHdd:(REG8)drv path:(NSString *)path;
 @end
 
 @implementation NP2KeyBar {
@@ -214,6 +220,8 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	UIButton *_softkbdButton;
 	UIButton *_hideButton;
 	UIButton *_showButton;
+	UILabel *_speedLabel;
+	int _slowCount;
 	NSMutableArray<NP2KeyButton *> *_keys;
 	NSMutableArray<NSNumber *> *_separatorBefore;	/* per key */
 	CGRect _keyboardFrame;							/* software keyboard, in window coordinates */
@@ -276,6 +284,16 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	[_showButton addTarget:self action:@selector(showBar) forControlEvents:UIControlEventTouchUpInside];
 	[self addSubview:_showButton];
 
+	_speedLabel = [[UILabel alloc] init];
+	_speedLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+	_speedLabel.textColor = UIColor.blackColor;
+	_speedLabel.textAlignment = NSTextAlignmentCenter;
+	_speedLabel.backgroundColor = [UIColor.systemOrangeColor colorWithAlphaComponent:0.85];
+	_speedLabel.layer.cornerRadius = 6;
+	_speedLabel.layer.masksToBounds = YES;
+	_speedLabel.hidden = YES;
+	[self addSubview:_speedLabel];
+
 	NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
 	[nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
 	[nc addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
@@ -289,6 +307,7 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 			return;
 		}
 		[bar refreshModifiers];
+		[bar refreshSpeed];
 	}];
 	[self applyHidden];
 	return self;
@@ -367,6 +386,24 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	}
 }
 
+/* Warns when the emulator cannot keep real time (MIDI timing suffers). */
+- (void)refreshSpeed
+{
+	double speed = lifecycle_emulationspeed();
+	if (speed < 0) {
+		return;		/* no new measurement yet */
+	}
+	_slowCount = (speed < 0.95) ? _slowCount + 1 : 0;
+	BOOL show = settings_showspeed() && _slowCount >= 2;
+	if (show) {
+		_speedLabel.text = [NSString stringWithFormat:@"速度 %d%%", (int)(speed * 100 + 0.5)];
+	}
+	if (_speedLabel.hidden == show) {
+		_speedLabel.hidden = !show;
+		[self setNeedsLayout];
+	}
+}
+
 - (void)toggleSoftKeyboard
 {
 	/* SDL enables text input from the start without showing the keyboard,
@@ -421,14 +458,19 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		[weakSelf confirmReset];
 	}];
 	reset.attributes = UIMenuElementAttributesDestructive;
-	UIAction *np2menu = [UIAction actionWithTitle:@"NP2 メニュー (F11)" image:[UIImage systemImageNamed:@"gearshape"]
+	UIAction *settings = [UIAction actionWithTitle:@"設定…" image:[UIImage systemImageNamed:@"gearshape"]
+	                                   identifier:nil handler:^(UIAction *action) {
+		(void)action;
+		settingsview_present([weakSelf hostController]);
+	}];
+	UIAction *np2menu = [UIAction actionWithTitle:@"NP2 メニュー (F11)" image:[UIImage systemImageNamed:@"slider.horizontal.3"]
 	                                  identifier:nil handler:^(UIAction *action) {
 		(void)action;
 		sysmenu_menuopen(0, 0, 0);
 	}];
 	return [UIMenu menuWithChildren:@[
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ fdd, hdd ]],
-		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ np2menu, reset ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, np2menu, reset ]],
 	]];
 }
 
@@ -486,13 +528,18 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	[[self hostController] presentViewController:alert animated:YES completion:nil];
 }
 
+/* The topmost presented controller (e.g. the settings screen), to present on. */
 - (UIViewController *)hostController
 {
 	UIResponder *responder = self;
 	while (responder && ![responder isKindOfClass:[UIViewController class]]) {
 		responder = responder.nextResponder;
 	}
-	return (UIViewController *)responder;
+	UIViewController *controller = (UIViewController *)responder;
+	while (controller.presentedViewController && !controller.presentedViewController.isBeingDismissed) {
+		controller = controller.presentedViewController;
+	}
+	return controller;
 }
 
 - (void)confirmReset
@@ -693,6 +740,10 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		[self layoutHorizontal:frame.size];
 	}
 
+	CGSize speed = CGSizeMake(84, 22);
+	_speedLabel.frame = CGRectMake(bounds.size.width - safe.right - speed.width - kGap,
+		MAX(safe.top, kGap), speed.width, speed.height);
+
 	CGSize show = CGSizeMake(44, 30);
 	_showButton.frame = CGRectMake(bounds.size.width - safe.right - show.width - kGap,
 		bounds.size.height - MAX(safe.bottom, kGap) - show.height, show.width, show.height);
@@ -776,6 +827,18 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 			}
 			NSLog(@"keybar:   %@ = %@ [%@]", slot.title, slot.subtitle, [titles componentsJoinedByString:@", "]);
 		}
+	}
+	else if ([command isEqualToString:@"!settings"]) {
+		settingsview_present([self hostController]);
+	}
+	else if ([command hasPrefix:@"!tap:"]) {
+		settingsview_debugtap([command substringFromIndex:5].UTF8String);
+	}
+	else if ([command isEqualToString:@"!guide"]) {
+		settingsview_presentguide([self hostController]);
+	}
+	else if ([command isEqualToString:@"!dismiss"]) {
+		[[self hostController] dismissViewControllerAnimated:NO completion:nil];
 	}
 	else if ([command isEqualToString:@"!reset"]) {
 		reset_machine();
@@ -874,7 +937,23 @@ void keybar_initialize(void)
 		s_keybar = [[NP2KeyBar alloc] initWithFrame:view.bounds];
 		[view addSubview:s_keybar];
 		keyinput_onchange = refresh_modifiers;
+		lifecycle_start();
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+			settingsview_presentguideifneeded([s_keybar hostController]);
+		});
 	}];
+}
+
+void keybar_pickhdd(unsigned char drv)
+{
+	[s_keybar pickFileInto:kHddDir handler:^(NSString *path) {
+		[s_keybar setHdd:drv path:path];
+	}];
+}
+
+void keybar_sethdd(unsigned char drv, const char *path)
+{
+	[s_keybar setHdd:drv path:path ? [NSString stringWithUTF8String:path] : nil];
 }
 
 void keybar_debugcommand(const char *command)

@@ -158,6 +158,9 @@ static const UINT8 midictrltbl[] = {
 
 static UINT8 midictrlindex[128];
 
+/* open instances, for cmmidi_allnotesoff() */
+static CMMIDI s_instances[8];
+
 
 // ----
 
@@ -743,8 +746,14 @@ static void
 midirelease(COMMNG self)
 {
 	CMMIDI midi;
+	UINT i;
 
 	midi = (CMMIDI)(self + 1);
+	for (i = 0; i < NELEMENTS(s_instances); i++) {
+		if (s_instances[i] == midi) {
+			s_instances[i] = NULL;
+		}
+	}
 	if (midi->opened & CMMIDI_MIDIIN) {
 		midiport_closein(midi->hmidiin);
 	}
@@ -855,5 +864,37 @@ cmmidi_create(const UINT device, const char *midiout, const char *midiin, const 
 	midi->midilast = 0x80;
 	midi->midimodule = (UINT8)module2number(module);
 	FillMemory(midi->mch, sizeof(midi->mch), 0xff);
+	for (UINT i = 0; i < NELEMENTS(s_instances); i++) {
+		if (s_instances[i] == NULL) {
+			s_instances[i] = midi;
+			break;
+		}
+	}
 	return ret;
+}
+
+/* Silences the external devices right away (All Sound Off, All Notes Off and
+ * Reset All Controllers' sustain on every channel), e.g. before the app is
+ * suspended or the output device changes. The guest is not told. */
+void
+cmmidi_allnotesoff(void)
+{
+	UINT i;
+	UINT8 msg[3];
+
+	for (i = 0; i < NELEMENTS(s_instances); i++) {
+		CMMIDI midi = s_instances[i];
+		if (midi == NULL || !(midi->opened & CMMIDI_MIDIOUT)) {
+			continue;
+		}
+		for (msg[0] = 0xb0; msg[0] < 0xc0; msg[0]++) {
+			msg[1] = 0x40;	/* sustain off */
+			msg[2] = 0x00;
+			midiport_send(midi->hmidiout, msg, 3, 0);
+			msg[1] = 0x78;	/* all sound off */
+			midiport_send(midi->hmidiout, msg, 3, 0);
+			msg[1] = 0x7b;	/* all notes off */
+			midiport_send(midi->hmidiout, msg, 3, 0);
+		}
+	}
 }

@@ -162,6 +162,8 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/cmmidi.c
 	${IOS_DIR}/src/keybar.m
 	${IOS_DIR}/src/keyinput.m
+	${IOS_DIR}/src/lifecycle.m
+	${IOS_DIR}/src/settingsview.m
 	${IOS_DIR}/src/midiport.m
 	${IOS_DIR}/src/settings.m
 )
@@ -211,12 +213,14 @@ target_compile_options(NP21iOS PRIVATE
 # which makes the main loop run frames in bursts and ruins MIDI timing.
 set_source_files_properties(${NP2_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-everything;-O2")
 
-target_link_libraries(NP21iOS PRIVATE SDL2::SDL2main SDL2::SDL2-static "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers")
+target_link_libraries(NP21iOS PRIVATE SDL2::SDL2main SDL2::SDL2-static "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers" "-framework CoreAudioKit")
 
 # Settings app entries (copied as a folder; CodeSign runs after this step).
 add_custom_command(TARGET NP21iOS POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_directory
 		"${IOS_DIR}/Settings.bundle" "$<TARGET_BUNDLE_DIR:NP21iOS>/Settings.bundle"
+	# license texts for the in-app license screen
+	COMMAND "${CMAKE_SOURCE_DIR}/scripts/make-licenses.sh" "$<TARGET_BUNDLE_DIR:NP21iOS>/Licenses.txt"
 )
 
 set_target_properties(NP21iOS PROPERTIES

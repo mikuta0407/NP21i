@@ -26,8 +26,10 @@ enum {
 };
 
 struct _midiport_out {
+	const char		*selection;		/* live: points into the config */
 	MIDIEndpointRef	dests[32];
 	UINT			ndests;
+	MIDIPORTOUT		next;
 };
 
 typedef struct {
@@ -36,6 +38,8 @@ typedef struct {
 } MIDIINBYTE;
 
 struct _midiport_in {
+	const char		*selection;		/* live: points into the config */
+	MIDIPORTIN		next;
 	MIDIEndpointRef	sources[MIDIIN_MAXSOURCES];
 	UINT			nsources;
 	/* single-producer (CoreMIDI thread) / single-consumer (emulator) ring */
@@ -52,6 +56,10 @@ static MIDIEndpointRef s_virtualout;
 static MIDIEndpointRef s_virtualin;
 static os_unfair_lock s_inlock = OS_UNFAIR_LOCK_INIT;
 static MIDIPORTIN s_activein;		/* receives data from s_virtualin */
+static MIDIPORTOUT s_outs;			/* open handles, re-resolved on changes */
+static MIDIPORTIN s_ins;
+
+void (*midiport_onchange)(void);
 
 static NSString *endpoint_name(MIDIEndpointRef ep)
 {
@@ -74,6 +82,71 @@ static BOOL selection_matches(const char *selection, MIDIEndpointRef ep)
 static BOOL is_nc(const char *selection)
 {
 	return selection != NULL && milstr_cmp(selection, MIDIPORT_NC) == 0;
+}
+
+static void resolve_out(MIDIPORTOUT out)
+{
+	out->ndests = 0;
+	if (is_nc(out->selection)) {
+		return;
+	}
+	for (ItemCount i = 0; i < MIDIGetNumberOfDestinations() && out->ndests < NELEMENTS(out->dests); i++) {
+		MIDIEndpointRef ep = MIDIGetDestination(i);
+		if (ep == s_virtualin) {
+			continue;	/* never loop back into ourselves */
+		}
+		if (selection_matches(out->selection, ep)) {
+			out->dests[out->ndests++] = ep;
+			NSLog(@"midiport: output -> %@", endpoint_name(ep));
+		}
+	}
+}
+
+static void resolve_in(MIDIPORTIN in)
+{
+	for (UINT i = 0; i < in->nsources; i++) {
+		MIDIPortDisconnectSource(s_inport, in->sources[i]);
+	}
+	in->nsources = 0;
+	if (is_nc(in->selection)) {
+		return;
+	}
+	for (ItemCount i = 0; i < MIDIGetNumberOfSources() && in->nsources < MIDIIN_MAXSOURCES; i++) {
+		MIDIEndpointRef ep = MIDIGetSource(i);
+		if (ep == s_virtualout) {
+			continue;
+		}
+		if (selection_matches(in->selection, ep)) {
+			MIDIPortConnectSource(s_inport, ep, NULL);
+			in->sources[in->nsources++] = ep;
+			NSLog(@"midiport: input <- %@", endpoint_name(ep));
+		}
+	}
+}
+
+void midiport_refresh(void)
+{
+	for (MIDIPORTOUT out = s_outs; out; out = out->next) {
+		resolve_out(out);
+	}
+	for (MIDIPORTIN in = s_ins; in; in = in->next) {
+		resolve_in(in);
+	}
+}
+
+void midiport_list(BOOL sources, void (^callback)(const char *name))
+{
+	if (!midiport_initialize()) {
+		return;
+	}
+	ItemCount n = sources ? MIDIGetNumberOfSources() : MIDIGetNumberOfDestinations();
+	for (ItemCount i = 0; i < n; i++) {
+		MIDIEndpointRef ep = sources ? MIDIGetSource(i) : MIDIGetDestination(i);
+		if (ep == s_virtualout || ep == s_virtualin) {
+			continue;
+		}
+		callback(endpoint_name(ep).UTF8String);
+	}
 }
 
 static void ring_push(MIDIPORTIN in, const UINT8 *data, UINT length, UINT64 time)
@@ -119,7 +192,16 @@ BOOL midiport_initialize(void)
 		return TRUE;
 	}
 	OSStatus err = MIDIClientCreateWithBlock(CFSTR("NP21"), &s_client, ^(const MIDINotification *message) {
-		(void)message;
+		/* Devices come and go (USB, Bluetooth): re-resolve the selections.
+		 * Handles are used by the emulator on the main thread. */
+		if (message->messageID == kMIDIMsgSetupChanged) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				midiport_refresh();
+				if (midiport_onchange) {
+					midiport_onchange();
+				}
+			});
+		}
 	});
 	if (err != noErr) {
 		NSLog(@"midiport: MIDIClientCreate failed (%d)", (int)err);
@@ -155,23 +237,17 @@ BOOL midiport_initialize(void)
 
 MIDIPORTOUT midiport_openout(const char *selection)
 {
-	if (is_nc(selection) || !midiport_initialize()) {
+	if (!midiport_initialize()) {
 		return NULL;
 	}
 	MIDIPORTOUT out = calloc(1, sizeof(*out));
 	if (out == NULL) {
 		return NULL;
 	}
-	for (ItemCount i = 0; i < MIDIGetNumberOfDestinations() && out->ndests < NELEMENTS(out->dests); i++) {
-		MIDIEndpointRef ep = MIDIGetDestination(i);
-		if (ep == s_virtualin) {
-			continue;	/* never loop back into ourselves */
-		}
-		if (selection_matches(selection, ep)) {
-			out->dests[out->ndests++] = ep;
-			NSLog(@"midiport: output -> %@", endpoint_name(ep));
-		}
-	}
+	out->selection = selection;
+	resolve_out(out);
+	out->next = s_outs;
+	s_outs = out;
 	return out;
 }
 
@@ -198,6 +274,12 @@ void midiport_send(MIDIPORTOUT out, const UINT8 *data, UINT length, UINT64 times
 
 void midiport_closeout(MIDIPORTOUT out)
 {
+	for (MIDIPORTOUT *p = &s_outs; *p; p = &(*p)->next) {
+		if (*p == out) {
+			*p = out->next;
+			break;
+		}
+	}
 	free(out);
 }
 
@@ -205,24 +287,17 @@ void midiport_closeout(MIDIPORTOUT out)
 
 MIDIPORTIN midiport_openin(const char *selection)
 {
-	if (is_nc(selection) || !midiport_initialize()) {
+	if (!midiport_initialize()) {
 		return NULL;
 	}
 	MIDIPORTIN in = calloc(1, sizeof(*in));
 	if (in == NULL) {
 		return NULL;
 	}
-	for (ItemCount i = 0; i < MIDIGetNumberOfSources() && in->nsources < MIDIIN_MAXSOURCES; i++) {
-		MIDIEndpointRef ep = MIDIGetSource(i);
-		if (ep == s_virtualout) {
-			continue;
-		}
-		if (selection_matches(selection, ep)) {
-			MIDIPortConnectSource(s_inport, ep, NULL);
-			in->sources[in->nsources++] = ep;
-			NSLog(@"midiport: input <- %@", endpoint_name(ep));
-		}
-	}
+	in->selection = selection;
+	resolve_in(in);
+	in->next = s_ins;
+	s_ins = in;
 	os_unfair_lock_lock(&s_inlock);
 	s_activein = in;
 	os_unfair_lock_unlock(&s_inlock);
@@ -260,6 +335,12 @@ void midiport_closein(MIDIPORTIN in)
 	}
 	for (UINT i = 0; i < in->nsources; i++) {
 		MIDIPortDisconnectSource(s_inport, in->sources[i]);
+	}
+	for (MIDIPORTIN *p = &s_ins; *p; p = &(*p)->next) {
+		if (*p == in) {
+			*p = in->next;
+			break;
+		}
 	}
 	os_unfair_lock_lock(&s_inlock);
 	if (s_activein == in) {

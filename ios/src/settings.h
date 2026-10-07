@@ -1,9 +1,38 @@
 /**
  * @file	settings.h
- * @brief	App settings from the iOS Settings app (Settings.bundle)
+ * @brief	App settings (NSUserDefaults), shared by the Settings app
+ *			(Settings.bundle) and the in-app settings screen
  */
 
 #pragma once
 
+#include "compiler.h"
+
+#ifdef __OBJC__
+#import <Foundation/Foundation.h>
+
+extern NSString *const kSettingMidiOutputLatency;	/* ms, 0 = immediately */
+extern NSString *const kSettingMidiInputLatency;	/* ms, 0 = immediately */
+extern NSString *const kSettingKeyboardLayout;		/* KEYLAYOUT_JIS / KEYLAYOUT_US */
+extern NSString *const kSettingRunInBackground;		/* BOOL */
+extern NSString *const kSettingResume;				/* BOOL */
+extern NSString *const kSettingShowSpeed;			/* BOOL */
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Loads the settings and keeps them applied when they change. */
 void settings_initialize(void);
+
+BOOL settings_runinbackground(void);
+BOOL settings_resume(void);
+BOOL settings_showspeed(void);
+
+/* Saves np2cfg / np2oscfg (np21kai.cfg) after they were changed. */
+void settings_savenp2cfg(void);
+
+#ifdef __cplusplus
+}
+#endif

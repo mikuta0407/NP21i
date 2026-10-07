@@ -4,8 +4,12 @@
  *
  * Endpoint selection strings (np21kai.cfg: mpu98map / mpu98min etc.):
  *   "" or "*"   all hardware/network endpoints
- *   "N/C"       not connected
+ *   "N/C"       no hardware/network endpoint (the virtual ones below still work)
  *   otherwise   endpoints whose display name contains the string (case-insensitive)
+ *
+ * The selection string is kept by pointer (it lives in the config) and is
+ * looked up again by midiport_refresh() and whenever devices are added or
+ * removed, so a Bluetooth device connected later is picked up.
  *
  * Independently of the selection, an opened output is always also sent to the
  * app's virtual source "NP21 MIDI OUT", and an opened input always also receives
@@ -27,7 +31,15 @@ typedef struct _midiport_in *MIDIPORTIN;
 /* Creates the CoreMIDI client and the virtual endpoints. Safe to call more than once. */
 BOOL midiport_initialize(void);
 
-/* Returns NULL when the selection is "N/C" or CoreMIDI is unavailable. */
+/* Re-resolves the selections of all open handles (main thread). */
+void midiport_refresh(void);
+/* Names of the hardware/network endpoints (not the app's virtual ones). */
+void midiport_list(BOOL sources, void (^callback)(const char *name));
+/* Called on the main thread after the MIDI setup changed. */
+extern void (*midiport_onchange)(void);
+
+/* Returns NULL only when CoreMIDI is unavailable. `selection` must stay valid
+ * until the handle is closed. */
 MIDIPORTOUT midiport_openout(const char *selection);
 /* timestamp: mach_absolute_time() based host time to deliver at, 0 = now. */
 void midiport_send(MIDIPORTOUT hdl, const UINT8 *data, UINT length, UINT64 timestamp);
