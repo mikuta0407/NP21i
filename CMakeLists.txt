@@ -178,6 +178,8 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/dpad.m
 	${IOS_DIR}/src/kbdlayout.m
 	${IOS_DIR}/src/kbdview.m
+	${IOS_DIR}/src/diskfs.c
+	${IOS_DIR}/src/diskedit.m
 	${IOS_DIR}/src/keybar.m
 	${IOS_DIR}/src/keyinput.m
 	${IOS_DIR}/src/lifecycle.m
@@ -237,6 +239,9 @@ target_link_libraries(NP21iOS PRIVATE ${SDL_LIBRARIES} "-framework CoreMIDI" "-f
 add_custom_command(TARGET NP21iOS POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_directory
 		"${IOS_DIR}/Settings.bundle" "$<TARGET_BUNDLE_DIR:NP21iOS>/Settings.bundle"
+	# copied into disk images to set up the host drive (diskedit.m)
+	COMMAND ${CMAKE_COMMAND} -E copy
+		"${NP2_DIR}/np2tool/HOSTDRV.COM" "$<TARGET_BUNDLE_DIR:NP21iOS>/HOSTDRV.COM"
 	# license texts for the in-app license screen
 	COMMAND "${CMAKE_SOURCE_DIR}/scripts/make-licenses.sh" "$<TARGET_BUNDLE_DIR:NP21iOS>/Licenses.txt"
 )

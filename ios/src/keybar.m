@@ -29,6 +29,7 @@
 #include "lifecycle.h"
 #include "settings.h"
 #include "settingsview.h"
+#include "diskedit.h"
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -615,8 +616,13 @@ static void setup_text_field(UIViewController *controller);
 		(void)action;
 		sysmenu_menuopen(0, 0, 0);
 	}];
+	UIAction *files = [UIAction actionWithTitle:@"ディスクの中身…" image:[UIImage systemImageNamed:@"folder"]
+	                                identifier:nil handler:^(UIAction *action) {
+		(void)action;
+		diskedit_present([weakSelf hostController]);
+	}];
 	return [UIMenu menuWithChildren:@[
-		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ fdd, hdd ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ fdd, hdd, files ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, np2menu, reset ]],
 	]];
 }
@@ -1039,6 +1045,9 @@ static void setup_text_field(UIViewController *controller);
 
 - (void)debugCommand:(NSString *)command
 {
+	if (diskedit_debugcommand(command)) {
+		return;
+	}
 	if ([command hasPrefix:@"!insert"] && command.length > 9) {
 		insert_fdd((REG8)([command characterAtIndex:7] - '1'), [command substringFromIndex:9]);
 	}
@@ -1238,6 +1247,11 @@ void keybar_pickhdd(unsigned char drv)
 void keybar_sethdd(unsigned char drv, const char *path)
 {
 	[s_keybar setHdd:drv path:path ? [NSString stringWithUTF8String:path] : nil];
+}
+
+void keybar_resetmachine(void)
+{
+	reset_machine();
 }
 
 void keybar_debugcommand(const char *command)

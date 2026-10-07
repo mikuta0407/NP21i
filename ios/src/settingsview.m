@@ -13,6 +13,7 @@
 #include "keyinput.h"
 #include "keybar.h"
 #include "midiport.h"
+#include "diskedit.h"
 
 #import <CoreAudioKit/CoreAudioKit.h>
 #include <pccore.h>
@@ -541,7 +542,10 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"ホストドライブ（Z:）", [NSString stringWithFormat:@"%@ のファイルを DOS の Z: ドライブ（AUTOEXEC.BAT などで HOSTDRV を組み込んだ場合）から読み書きできます。有効にするとリセット後に反映されます。", data_dir_hint(@"hostdrv")], @[
+	[sections addObject:section(@"ホストドライブ（Z:）", [NSString stringWithFormat:@"%@ のファイルを DOS の Z: ドライブから読み書きできます。DOS 側に HOSTDRV の組み込みが必要です（「Z: を使えるようにする」で起動ディスクに組み込めます）。設定はリセット後に反映されます。", data_dir_hint(@"hostdrv")], @[
+		button_row(@"Z: を使えるようにする", ^(UIViewController *c) {
+			diskedit_setuphostdrive(c);
+		}),
 		toggle_row(@"ホストドライブを使う", ^BOOL { return np2cfg.hdrvenable != 0; }, ^(BOOL on) {
 			np2cfg.hdrvenable = on ? 1 : 0;
 			if (on) {
@@ -560,6 +564,9 @@ static NSArray<NP2Section *> *settings_sections(void)
 	])];
 
 	[sections addObject:section(@"ディスク", nil, @[
+		button_row(@"ディスクの中身を見る・編集する", ^(UIViewController *c) {
+			diskedit_present(c);
+		}),
 		detail_row(@"新しいディスクを作る", nil, ^(UIViewController *c) {
 			[c.navigationController pushViewController:new_disk_screen() animated:YES];
 		}),

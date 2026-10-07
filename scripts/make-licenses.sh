@@ -20,6 +20,8 @@ sjis() {
 	printf '%s\n' "NP21 for iOS は Neko Project II / Neko Project 21/W / NP2kai を元にしています。"
 	printf '%s\n' "以下は、このアプリに含まれるソフトウェアのライセンスです。"
 
+	printf '%s\n' "ディスクに組み込む HOSTDRV.COM も Neko Project II（np2tool）のものです。"
+
 	section "Neko Project II / Neko Project 21/W (NP2 developer team)"
 	sjis "$L/LICENSE.TXT"
 	section "NP2kai (AZO)"

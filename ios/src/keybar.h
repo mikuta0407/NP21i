@@ -22,6 +22,9 @@ void keybar_pickhdd(unsigned char drv);
  * slot and offers to reset. */
 void keybar_sethdd(unsigned char drv, const char *path);
 
+/* Resets the PC-98 (no question asked). */
+void keybar_resetmachine(void);
+
 /* Testing: taps the bar button with the given label ("f·1", "GRPH", ...),
  * or runs a menu command: "!reset", "!np2menu", "!eject1", "!eject2",
  * "!insert1:<path>", "!insert2:<path>", "!hide", "!show", "!softkbd",
@@ -36,7 +39,8 @@ void keybar_sethdd(unsigned char drv, const char *path);
  * "!dpad:up|down|left|right" (cross keys), "!dpad:toggle",
  * "!kbdkind:<pc98|system>" (choose and show a screen keyboard; "!softkbd"
  * toggles it), "!kbdtap:<key id>" (tap a key on the app's keyboard, see
- * kbdlayout.m), "!kbdblock:<n>" (its tab when paged). */
+ * kbdlayout.m), "!kbdblock:<n>" (its tab when paged), and those of
+ * diskedit_debugcommand. */
 void keybar_debugcommand(const char *command);
 
 #ifdef __cplusplus
