@@ -14,6 +14,7 @@
 #include "keybar.h"
 #include "midiport.h"
 #include "diskedit.h"
+#include "lifecycle.h"
 
 #import <CoreAudioKit/CoreAudioKit.h>
 #include <pccore.h>
@@ -600,7 +601,7 @@ void settingsview_present(UIViewController *host)
 	NP2TableViewController *root = [[NP2TableViewController alloc] initWithTitle:@"設定" build:^NSArray<NP2Section *> *{
 		return settings_sections();
 	}];
-	UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:root];
+	UINavigationController *nav = [[NP2PausingNavigationController alloc] initWithRootViewController:root];
 	root.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone primaryAction:[UIAction actionWithHandler:^(UIAction *action) {
 		(void)action;
 		[nav dismissViewControllerAnimated:YES completion:nil];

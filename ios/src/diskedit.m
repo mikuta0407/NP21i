@@ -11,7 +11,9 @@
  *   reopens it on the next access) before each operation, and the PC-98 is
  *   reset when the screens close if anything was changed.
  * Each operation opens the image afresh, so it never works from a FAT read
- * before the guest last wrote.
+ * before the guest last wrote. The emulator is paused while these screens
+ * are shown (NP2PausingNavigationController), so the guest does not write
+ * in between.
  *
  * DOS names are Shift_JIS (code page 932) in 8.3 form; names from iOS are
  * converted, shortened with "~1" when they do not fit.
@@ -22,6 +24,7 @@
 #include "diskfs.h"
 #include "keybar.h"
 #include "settings.h"
+#include "lifecycle.h"
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -1059,7 +1062,7 @@ void diskedit_present(UIViewController *host)
 {
 	NP2DiskList *list = [NP2DiskList new];
 	list.host = host;
-	UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:list];
+	UINavigationController *nav = [[NP2PausingNavigationController alloc] initWithRootViewController:list];
 	__weak NP2DiskList *weakList = list;
 	list.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone primaryAction:[UIAction actionWithHandler:^(UIAction *action) {
 		(void)action;

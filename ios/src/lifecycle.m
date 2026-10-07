@@ -29,10 +29,12 @@
 #include <np2.h>
 #include <soundmng.h>
 #include <common/strres.h>
+#include <timing.h>
 
 extern void cmmidi_allnotesoff(void);
 
-static BOOL s_paused;
+static BOOL s_paused;			/* in the background, not running there */
+static int s_screens;			/* app screens shown (lifecycle_pause) */
 
 static const OEMCHAR *state_path(void)
 {
@@ -106,7 +108,9 @@ static void did_enter_background(void)
 static void will_enter_foreground(void)
 {
 	if (s_paused) {
-		soundmng_play();
+		if (s_screens == 0) {
+			soundmng_play();
+		}
 		s_paused = NO;
 		NSLog(@"lifecycle: resumed");
 	}
@@ -127,6 +131,70 @@ void lifecycle_start(void)
 	            usingBlock:^(NSNotification *note) { (void)note; save_state(); }];
 }
 
+// ---- paused for the app's screens
+
+void lifecycle_pause(void)
+{
+	if (s_screens++ == 0) {
+		cmmidi_allnotesoff();
+		soundmng_stop();
+		NSLog(@"lifecycle: paused for a screen");
+	}
+}
+
+void lifecycle_resume(void)
+{
+	if (s_screens > 0 && --s_screens == 0) {
+		/* the time away is not to be caught up */
+		timing_reset();
+		if (!s_paused) {
+			soundmng_play();
+		}
+		NSLog(@"lifecycle: resumed");
+	}
+}
+
+int np2ios_pausewait(void)
+{
+	if (s_screens == 0) {
+		return 0;
+	}
+	CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0 / 60, false);
+	return 1;
+}
+
+@implementation NP2PausingNavigationController {
+	BOOL _pausing;
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear:animated];
+	if (!_pausing) {
+		_pausing = YES;
+		lifecycle_pause();
+	}
+}
+
+- (void)viewDidDisappear:(BOOL)animated
+{
+	[super viewDidDisappear:animated];
+	/* not when something is shown over it */
+	if (_pausing && (self.isBeingDismissed || self.presentingViewController == nil)) {
+		_pausing = NO;
+		lifecycle_resume();
+	}
+}
+
+- (void)dealloc
+{
+	if (_pausing) {
+		lifecycle_resume();
+	}
+}
+
+@end
+
 // ---- emulation speed
 
 static double host_seconds(UINT64 host)
@@ -146,6 +214,10 @@ double lifecycle_emulationspeed(void)
 	static UINT64 windowstart;
 	static double speed = -1;
 
+	if (s_screens) {
+		lasthost = 0;			/* start over when resumed */
+		return -1;
+	}
 	UINT64 now = mach_absolute_time();
 	UINT32 clock = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
 	if (lasthost == 0 || pccore.realclock == 0 || host_seconds(now - lasthost) > 2.0) {

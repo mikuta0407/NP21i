@@ -1,0 +1,29 @@
+diff --git a/sdl/np2.c b/sdl/np2.c
+index 80e2f97..b100d19 100755
+--- a/sdl/np2.c
++++ b/sdl/np2.c
+@@ -809,6 +809,12 @@ havemmx(void)
+ #endif /* GCC_CPU_ARCH_IA32 */
+ }
+ 
++#if defined(NP2_IOS_KEYBAR)
++/* iOS layer: nonzero while the app's other screens are shown; it then
++ * waits a little (the UI keeps running through taskmng_rol's event pump). */
++extern int np2ios_pausewait(void);
++#endif
++
+ static void np2exec()
+ {
+ 	while(taskmng_isavail()) {
+@@ -822,6 +828,11 @@ static void np2exec()
+ #endif
+ 
+ 		taskmng_rol();
++#if defined(NP2_IOS_KEYBAR)
++		if (np2ios_pausewait()) {
++			continue;
++		}
++#endif
+ #if defined(EMSCRIPTEN) && !defined(__LIBRETRO__)
+ //		emscripten_sleep_with_yield(0);
+ 		emscripten_sleep(0);
