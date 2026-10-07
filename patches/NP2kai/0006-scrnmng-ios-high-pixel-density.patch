@@ -1,0 +1,43 @@
+diff --git a/sdl/scrnmng.c b/sdl/scrnmng.c
+index 2ff2092..02c3176 100644
+--- a/sdl/scrnmng.c
++++ b/sdl/scrnmng.c
+@@ -37,6 +37,17 @@ SDL_Window* s_window;
+ static SDL_Renderer* s_renderer;
+ static SDL_Texture* s_texture;
+ 
++/* iOS: render at the display's pixel density. Without it SDL draws at one
++ * pixel per point and iOS scales that up, which loses lines when the screen
++ * is shown smaller than 640 points (iPhone in portrait). */
++#if USE_SDL >= 3 && defined(SDL_PLATFORM_IOS)
++#define	WINDOW_FLAGS	SDL_WINDOW_HIGH_PIXEL_DENSITY
++#elif USE_SDL == 2 && defined(__IPHONEOS__)
++#define	WINDOW_FLAGS	SDL_WINDOW_ALLOW_HIGHDPI
++#else
++#define	WINDOW_FLAGS	0
++#endif
++
+ #if defined(NP2_IOS_KEYBAR)
+ /* Empty band (in PC-98 screen pixels) below the screen, kept inside the
+  * logical size so that the iOS key bar can sit there (scrnmng_setbottompad). */
+@@ -138,16 +149,16 @@ BRESULT scrnmng_create(UINT8 mode) {
+ 
+ #if USE_SDL >= 3
+ 	if(mode & SCRNMODE_ROTATEMASK) {
+-		s_window = SDL_CreateWindow(app_name, scrnmng.height, scrnmng.width, 0);
++		s_window = SDL_CreateWindow(app_name, scrnmng.height, scrnmng.width, WINDOW_FLAGS);
+ 	} else {
+-		s_window = SDL_CreateWindow(app_name, scrnmng.width, scrnmng.height, 0);
++		s_window = SDL_CreateWindow(app_name, scrnmng.width, scrnmng.height, WINDOW_FLAGS);
+ 	}
+ 	s_renderer = SDL_CreateRenderer(s_window, NULL);
+ #elif USE_SDL >= 2
+ 	if(mode & SCRNMODE_ROTATEMASK) {
+-		s_window = SDL_CreateWindow(app_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, scrnmng.height, scrnmng.width, 0);
++		s_window = SDL_CreateWindow(app_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, scrnmng.height, scrnmng.width, WINDOW_FLAGS);
+ 	} else {
+-		s_window = SDL_CreateWindow(app_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, scrnmng.width, scrnmng.height, 0);
++		s_window = SDL_CreateWindow(app_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, scrnmng.width, scrnmng.height, WINDOW_FLAGS);
+ 	}
+ 	s_renderer = SDL_CreateRenderer(s_window, -1, 0);
+ #else
