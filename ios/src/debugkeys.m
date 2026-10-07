@@ -7,6 +7,8 @@
  * in reverse. Key names are SDL scancode names (SDL_GetScancodeFromName),
  * e.g. "3000:F10,500:Down,500:Return,1000:Left Shift+F9", or "#<number>"
  * for scancodes without a name (e.g. "#135" = International 1, PC-98 "_").
+ * "@<command>" is passed to keybar_debugcommand() instead (on-screen keys
+ * and menu commands, e.g. "500:@f·1", "500:@!reset").
  *
  * Pass it through simctl with the SIMCTL_CHILD_ prefix:
  *   SIMCTL_CHILD_NP2_DEBUG_KEYS="..." xcrun simctl launch <udid> <bundle id>
@@ -17,6 +19,7 @@
 
 #include "debugkeys.h"
 #include "debugscreen.h"
+#include "keybar.h"
 
 #ifndef NDEBUG
 
@@ -55,6 +58,11 @@ static void run_script(char *script)
 		usleep((useconds_t)atoi(step) * 1000);
 		char label[128];
 		SDL_strlcpy(label, colon + 1, sizeof(label));
+		if (label[0] == '@') {
+			keybar_debugcommand(label + 1);
+			fprintf(stderr, "debugkeys: sent %s\n", label);
+			continue;
+		}
 
 		SDL_Scancode combo[MAX_COMBO];
 		int count = 0;

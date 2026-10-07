@@ -64,6 +64,34 @@
 				<integer>50</integer>
 			</array>
 		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>Title</key>
+			<string>キーボード</string>
+			<key>FooterText</key>
+			<string>接続しているハードウェアキーボードの配列を選びます。JISではキーの位置どおりにPC-98のキーになります。USでは記号をキートップの文字どおりに入力できます（例: Shift+2で@）。画面上のソフトウェアキーボードは常に文字どおりに入力されます。</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Title</key>
+			<string>キーボード配列</string>
+			<key>Key</key>
+			<string>keyboard_layout</string>
+			<key>DefaultValue</key>
+			<integer>0</integer>
+			<key>Titles</key>
+			<array>
+				<string>JIS（日本語）</string>
+				<string>US（英語）</string>
+			</array>
+			<key>Values</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

@@ -160,6 +160,8 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/debugmidi.m
 	${IOS_DIR}/src/debugscreen.m
 	${IOS_DIR}/src/cmmidi.c
+	${IOS_DIR}/src/keybar.m
+	${IOS_DIR}/src/keyinput.m
 	${IOS_DIR}/src/midiport.m
 	${IOS_DIR}/src/settings.m
 )
@@ -194,6 +196,8 @@ target_compile_definitions(NP21iOS PRIVATE
 	# SDL port
 	# patch 0002: poll MIDI-IN on every MPU tick
 	SUPPORT_MPU98_TICK_MIDIIN
+	# patch 0003: the on-screen key bar shows the software keyboard instead of screen taps
+	NP2_IOS_KEYBAR
 	NP2_SDL SUPPORT_BMS USE_SDL=2 OSLINEBREAK_LF SUPPORT_SDL_AUDIO
 	SUPPORT_NP2_TICKCOUNT SUPPORT_NP2_THREAD SUPPORT_PTHREAD
 	NP2KAI_GIT_TAG="ios" NP2KAI_GIT_HASH="dev"
@@ -207,7 +211,7 @@ target_compile_options(NP21iOS PRIVATE
 # which makes the main loop run frames in bursts and ruins MIDI timing.
 set_source_files_properties(${NP2_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-everything;-O2")
 
-target_link_libraries(NP21iOS PRIVATE SDL2::SDL2main SDL2::SDL2-static "-framework CoreMIDI")
+target_link_libraries(NP21iOS PRIVATE SDL2::SDL2main SDL2::SDL2-static "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers")
 
 # Settings app entries (copied as a folder; CodeSign runs after this step).
 add_custom_command(TARGET NP21iOS POST_BUILD
@@ -219,6 +223,7 @@ set_target_properties(NP21iOS PROPERTIES
 	MACOSX_BUNDLE_INFO_PLIST "${IOS_DIR}/Info.plist"
 	XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "net.mikuta0407.np21ios"
 	XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+	XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC "YES"
 	XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
 	XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "iphonesimulator iphoneos"
 )

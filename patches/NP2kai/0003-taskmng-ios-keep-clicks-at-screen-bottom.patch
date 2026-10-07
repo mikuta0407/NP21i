@@ -1,0 +1,13 @@
+diff --git a/sdl/taskmng.c b/sdl/taskmng.c
+index dbd8a20..f50d378 100755
+--- a/sdl/taskmng.c
++++ b/sdl/taskmng.c
+@@ -152,7 +152,7 @@ void taskmng_rol(void) {
+ //						menubase_moving(e.button.x, e.button.y, 2);
+ 						menubase_moving(mx, my, 2);
+ 					}
+-#if defined(__IPHONEOS__)
++#if defined(__IPHONEOS__) && !defined(NP2_IOS_KEYBAR)
+ 					else if (SDL_IsTextInputActive())
+ 					{
+ 

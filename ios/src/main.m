@@ -16,6 +16,7 @@
 #include "compiler.h"
 #include "debugkeys.h"
 #include "debugmidi.h"
+#include "keybar.h"
 #include "midiport.h"
 #include "settings.h"
 
@@ -33,9 +34,12 @@ int SDL_main(int argc, char *argv[])
 		 * given relative to the data directory. */
 		chdir(dataDir.fileSystemRepresentation);
 	}
+	/* The key bar sits at the bottom edge: keep the home indicator out of the way. */
+	SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");
 	settings_initialize();
 	midiport_initialize();
 	debugmidi_start();
 	debugkeys_start();
+	keybar_initialize();
 	return np2_main(argc, argv);
 }
