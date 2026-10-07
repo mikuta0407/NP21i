@@ -8,6 +8,7 @@
 
 #import <CoreMIDI/CoreMIDI.h>
 #import <Foundation/Foundation.h>
+#include <mach/mach_time.h>
 #include <os/lock.h>
 #include <stdatomic.h>
 
@@ -29,13 +30,19 @@ struct _midiport_out {
 	UINT			ndests;
 };
 
+typedef struct {
+	UINT64	time;		/* host time the byte arrived */
+	UINT8	data;
+} MIDIINBYTE;
+
 struct _midiport_in {
 	MIDIEndpointRef	sources[MIDIIN_MAXSOURCES];
 	UINT			nsources;
 	/* single-producer (CoreMIDI thread) / single-consumer (emulator) ring */
 	_Atomic UINT	head;
 	_Atomic UINT	tail;
-	UINT8			ring[MIDIIN_RINGSIZE];
+	MIDIINBYTE		ring[MIDIIN_RINGSIZE];
+	UINT64			lastreadtime;
 };
 
 static MIDIClientRef s_client;
@@ -69,7 +76,7 @@ static BOOL is_nc(const char *selection)
 	return selection != NULL && milstr_cmp(selection, MIDIPORT_NC) == 0;
 }
 
-static void ring_push(MIDIPORTIN in, const UINT8 *data, UINT length)
+static void ring_push(MIDIPORTIN in, const UINT8 *data, UINT length, UINT64 time)
 {
 	UINT head = atomic_load_explicit(&in->head, memory_order_relaxed);
 	UINT tail = atomic_load_explicit(&in->tail, memory_order_acquire);
@@ -78,7 +85,8 @@ static void ring_push(MIDIPORTIN in, const UINT8 *data, UINT length)
 		if (next == tail) {
 			break;	/* overflow: drop the rest */
 		}
-		in->ring[head] = data[i];
+		in->ring[head].time = time;
+		in->ring[head].data = data[i];
 		head = next;
 	}
 	atomic_store_explicit(&in->head, head, memory_order_release);
@@ -93,8 +101,12 @@ static void read_proc(const MIDIPacketList *list, void *readProcRefCon, void *sr
 	MIDIPORTIN in = s_activein;
 	if (in) {
 		const MIDIPacket *packet = &list->packet[0];
+		UINT64 now = mach_absolute_time();
 		for (UInt32 i = 0; i < list->numPackets; i++) {
-			ring_push(in, packet->data, packet->length);
+			/* Drivers stamp the arrival time; virtual sources may send 0 or a
+			 * future time, which are treated as "now". */
+			UINT64 time = (packet->timeStamp && packet->timeStamp <= now) ? packet->timeStamp : now;
+			ring_push(in, packet->data, packet->length, time);
 			packet = MIDIPacketNext(packet);
 		}
 	}
@@ -217,7 +229,7 @@ MIDIPORTIN midiport_openin(const char *selection)
 	return in;
 }
 
-UINT midiport_read(MIDIPORTIN in, UINT8 *data)
+UINT midiport_read(MIDIPORTIN in, UINT8 *data, UINT64 until)
 {
 	if (in == NULL) {
 		return 0;
@@ -227,9 +239,18 @@ UINT midiport_read(MIDIPORTIN in, UINT8 *data)
 	if (tail == head) {
 		return 0;
 	}
-	*data = in->ring[tail];
+	if (until && in->ring[tail].time > until) {
+		return 0;	/* not yet, in emulated time */
+	}
+	*data = in->ring[tail].data;
+	in->lastreadtime = in->ring[tail].time;
 	atomic_store_explicit(&in->tail, (tail + 1) & (MIDIIN_RINGSIZE - 1), memory_order_release);
 	return 1;
+}
+
+UINT64 midiport_lastreadtime(MIDIPORTIN in)
+{
+	return in ? in->lastreadtime : 0;
 }
 
 void midiport_closein(MIDIPORTIN in)

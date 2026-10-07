@@ -1,0 +1,82 @@
+diff --git a/cbus/mpu98ii.c b/cbus/mpu98ii.c
+index 77525ac..5c27166 100755
+--- a/cbus/mpu98ii.c
++++ b/cbus/mpu98ii.c
+@@ -1194,6 +1194,10 @@ void mpu98ii_bind(void) {
+ 	
+ 	if(mpu98.enable){
+ 		mpu98ii_changeclock();
++#if defined(SUPPORT_MPU98_TICK_MIDIIN)
++		nevent_set(NEVENT_MIDIINPOLL, pccore.realclock / 1000,
++										mpu98ii_midiinpoll, NEVENT_ABSOLUTE);
++#endif
+ 
+ 		/* Optional stand-alone MPU-98II selected by the emulator setting. */
+ 		if (np2cfg.mpuenable) {
+@@ -1223,6 +1227,19 @@ void mpu98ii_bind(void) {
+ 	}
+ }
+ 
++#if defined(SUPPORT_MPU98_TICK_MIDIIN)
++// Poll MIDI-IN every 1ms of emulated time instead of once per frame, so that
++// software timing incoming data with its own timer (e.g. Recomposer recording
++// in UART mode) is not quantized to the frame rate.
++void mpu98ii_midiinpoll(NEVENTITEM item) {
++
++	nevent_set(NEVENT_MIDIINPOLL, pccore.realclock / 1000,
++										mpu98ii_midiinpoll, NEVENT_RELATIVE);
++	mpu98ii_callback();
++	(void)item;
++}
++#endif
++
+ //#define MIDIIN_DEBUG
+ 
+ void mpu98ii_callback(void) {
+diff --git a/cbus/mpu98ii.h b/cbus/mpu98ii.h
+index d754911..9fab615 100755
+--- a/cbus/mpu98ii.h
++++ b/cbus/mpu98ii.h
+@@ -97,6 +97,9 @@ void mpu98ii_bind(void);
+ void mpu98ii_setaux(UINT16 port, UINT8 irqnum);
+ 
+ void mpu98ii_callback(void);
++#if defined(SUPPORT_MPU98_TICK_MIDIIN)
++void mpu98ii_midiinpoll(NEVENTITEM item);
++#endif
+ void mpu98ii_midipanic(void);
+ 
+ void mpu98ii_changeclock(void);
+diff --git a/nevent.h b/nevent.h
+index 6ffc27c..7fe8089 100755
+--- a/nevent.h
++++ b/nevent.h
+@@ -57,8 +57,14 @@ enum tagNEventId
+ 	NEVENT_WABSNDOFF	= 33,
+ #endif
+ 	NEVENT_HRTIMER		= 34,
++#if defined(SUPPORT_MPU98_TICK_MIDIIN)
++	NEVENT_MIDIINPOLL	= 35,
++	/* ---- */
++	NEVENT_MAXEVENTS	= 36
++#else
+ 	/* ---- */
+ 	NEVENT_MAXEVENTS	= 35
++#endif
+ };
+ typedef enum tagNEventId NEVENTID;
+ 
+diff --git a/statsave.tbl b/statsave.tbl
+index d89c9b7..bc19603 100755
+--- a/statsave.tbl
++++ b/statsave.tbl
+@@ -20,6 +20,9 @@ static const PROCTBL evtproc[] = {
+ 			{PROCID('e','f','i','w'), fdc_intwait},
+ 			{PROCID('e','m','d','0'), midiwaitout},
+ 			{PROCID('e','m','d','1'), midiint},
++#if defined(SUPPORT_MPU98_TICK_MIDIIN)
++			{PROCID('e','m','d','2'), mpu98ii_midiinpoll},
++#endif
+ #if !defined(DISABLE_SOUND)
+ 			{PROCID('e','m','g','n'), musicgenint},
+ 			{PROCID('e','f','m','a'), fmport_a},

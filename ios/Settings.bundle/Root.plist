@@ -12,7 +12,7 @@
 			<key>Title</key>
 			<string>MIDI</string>
 			<key>FooterText</key>
-			<string>MIDI出力をエミュレータ内の時刻に合わせて遅らせて送り、再生のリズムを正確にします。0 msにすると即時送信になり、MIDI THRUで演奏をモニタするときの遅れが減ります。</string>
+			<string>MIDIの送受信をエミュレータ内の時刻に合わせて一定時間遅らせ、再生と録音のリズムを正確にします。0 msにすると即時になり、遅れは減りますがタイミングが最大約18 msばらつきます。入力の遅延分だけ録音が後ろにずれるので、必要ならレコンポーザのST+で補正してください。</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -35,6 +35,30 @@
 			<array>
 				<integer>0</integer>
 				<integer>10</integer>
+				<integer>20</integer>
+				<integer>30</integer>
+				<integer>50</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Title</key>
+			<string>MIDI入力の遅延</string>
+			<key>Key</key>
+			<string>midi_input_latency_ms</string>
+			<key>DefaultValue</key>
+			<integer>20</integer>
+			<key>Titles</key>
+			<array>
+				<string>0 ms（即時）</string>
+				<string>20 ms（標準）</string>
+				<string>30 ms</string>
+				<string>50 ms</string>
+			</array>
+			<key>Values</key>
+			<array>
+				<integer>0</integer>
 				<integer>20</integer>
 				<integer>30</integer>
 				<integer>50</integer>

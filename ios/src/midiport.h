@@ -34,8 +34,11 @@ void midiport_send(MIDIPORTOUT hdl, const UINT8 *data, UINT length, UINT64 times
 void midiport_closeout(MIDIPORTOUT hdl);
 
 MIDIPORTIN midiport_openin(const char *selection);
-/* Non-blocking. Returns 1 and stores a byte when data is available. */
-UINT midiport_read(MIDIPORTIN hdl, UINT8 *data);
+/* Non-blocking. Returns 1 and stores a byte when a byte that arrived at or
+ * before host time `until` (mach_absolute_time based, 0 = any) is available. */
+UINT midiport_read(MIDIPORTIN hdl, UINT8 *data, UINT64 until);
+/* Arrival time of the byte returned by the last successful midiport_read. */
+UINT64 midiport_lastreadtime(MIDIPORTIN hdl);
 void midiport_closein(MIDIPORTIN hdl);
 
 #ifdef __cplusplus

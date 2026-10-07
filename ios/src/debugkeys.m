@@ -5,7 +5,8 @@
  * NP2_DEBUG_KEYS="<delay ms>:<key>[+<key>...],..."
  * Each step waits <delay ms>, then presses the keys in order and releases them
  * in reverse. Key names are SDL scancode names (SDL_GetScancodeFromName),
- * e.g. "3000:F10,500:Down,500:Return,1000:Left Shift+F9".
+ * e.g. "3000:F10,500:Down,500:Return,1000:Left Shift+F9", or "#<number>"
+ * for scancodes without a name (e.g. "#135" = International 1, PC-98 "_").
  *
  * Pass it through simctl with the SIMCTL_CHILD_ prefix:
  *   SIMCTL_CHILD_NP2_DEBUG_KEYS="..." xcrun simctl launch <udid> <bundle id>
@@ -15,6 +16,7 @@
  */
 
 #include "debugkeys.h"
+#include "debugscreen.h"
 
 #ifndef NDEBUG
 
@@ -58,7 +60,7 @@ static void run_script(char *script)
 		int count = 0;
 		char *keyptr = NULL;
 		for (char *name = strtok_r(colon + 1, "+", &keyptr); name && count < MAX_COMBO; name = strtok_r(NULL, "+", &keyptr)) {
-			SDL_Scancode sc = SDL_GetScancodeFromName(name);
+			SDL_Scancode sc = (name[0] == '#') ? (SDL_Scancode)atoi(name + 1) : SDL_GetScancodeFromName(name);
 			if (sc == SDL_SCANCODE_UNKNOWN) {
 				fprintf(stderr, "debugkeys: unknown key '%s'\n", name);
 				continue;
@@ -88,6 +90,7 @@ static void *debugkeys_thread(void *arg)
 	/* cwd is the data directory (see main.m) */
 	for (;;) {
 		usleep(300 * 1000);
+		debugscreen_poll();
 		FILE *fp = fopen("debugkeys.txt", "r");
 		if (!fp) {
 			continue;

@@ -11,6 +11,12 @@
  * Instead every message is stamped with its position in emulated time
  * (CPU clock) mapped onto host time, plus a fixed latency
  * (cmmidi_latency_ms), and CoreMIDI delivers it at that time.
+ *
+ * Input timing: received bytes keep their host arrival time and are handed to
+ * the MPU only when emulated time reaches that moment (see midiin_until), so
+ * that real-time recording follows the player's timing instead of the frame
+ * rate. Together with the MPU polling on every tick (patch 0002) this places
+ * notes within an MPU tick of when they were played.
  */
 
 #include "compiler.h"
@@ -37,6 +43,12 @@ const char cmmidi_vermouth[] = "VERMOUTH";
 /* Output latency for timestamped delivery. 0 sends immediately.
  * Set from the Settings app (settings.m). */
 UINT cmmidi_latency_ms = 20;
+
+/* Input latency for delivering MIDI-IN in emulated time (see midiin_until);
+ * at least one frame (17.7ms) so that bytes arriving while the emulator
+ * sleeps between frames can still be placed at the right point.
+ * 0 delivers bytes as soon as the MPU polls. Set from the Settings app. */
+UINT cmmidi_midiin_latency_ms = 20;
 
 const char cmmidi_midiout_device[] = "MIDI-OUT device";
 const char cmmidi_midiin_device[] = "MIDI-IN device";
@@ -117,6 +129,12 @@ struct _cmmidi {
 	UINT32		lastclock;
 	UINT64		lasthost;
 
+	/* emulated time (in host time units) and its offset from real time,
+	 * for delivering MIDI-IN */
+	UINT32		inclock;
+	UINT64		inemu;
+	SINT64		inoffset;
+
 	UINT		midictrl;
 	UINT		midisyscnt;
 	UINT		mpos;
@@ -188,6 +206,52 @@ midi_timestamp(CMMIDI midi)
 	midi->lastclock = clock;
 	midi->lasthost = target;
 	return target;
+}
+
+/* Latest host arrival time that may be delivered now, or 0 for any.
+ *
+ * The emulator runs a frame of CPU time in a burst and then sleeps, so
+ * "now - emulated time" swings by up to a frame. Its maximum (reached at the
+ * start of each frame) is the offset at which emulated time follows real time.
+ * Bytes arriving while the emulator sleeps belong to emulated time that has
+ * already run, so every byte is delayed by a fixed latency of at least a frame
+ * and released at "arrival + latency" in emulated time: the timing between
+ * notes is kept, and the constant delay can be compensated in the sequencer
+ * (e.g. Recomposer's ST+). The offset follows increases immediately
+ * (emulation fell behind) and decreases slowly (1% of elapsed time). */
+static UINT64
+midiin_until(CMMIDI midi)
+{
+	UINT64 now;
+	UINT32 clock, elapsed;
+	UINT64 step;
+	SINT64 diff, decay;
+
+	if (cmmidi_midiin_latency_ms == 0 || pccore.realclock == 0) {
+		return 0;
+	}
+	now = mach_absolute_time();
+	clock = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
+	elapsed = clock - midi->inclock;
+	midi->inclock = clock;
+
+	if (midi->inemu == 0 || elapsed >= pccore.realclock) {
+		/* first call, or idle for more than a second: resync */
+		midi->inemu = now;
+		midi->inoffset = 0;
+		return now - ms2host(cmmidi_midiin_latency_ms);
+	}
+	step = ms2host(1) * elapsed / (pccore.realclock / 1000);
+	midi->inemu += step;
+	diff = (SINT64)(now - midi->inemu);
+	if (diff > midi->inoffset) {
+		midi->inoffset = diff;
+	}
+	else {
+		decay = (SINT64)(step / 100);
+		midi->inoffset -= MIN(midi->inoffset - diff, decay);
+	}
+	return midi->inemu + midi->inoffset - ms2host(cmmidi_midiin_latency_ms);
 }
 
 #ifndef NDEBUG
@@ -404,13 +468,47 @@ midisetparam(CMMIDI midi)
 
 // ----
 
+#ifndef NDEBUG
+/* NP2_DEBUG_MIDIINLOG=1: log "<arrival ms> <delivered ms> <released-at ms> <byte>"
+ * for every MIDI-IN byte handed to the MPU, to midiin.log. */
+static void
+midiin_log(CMMIDI midi, UINT64 until, UINT8 data)
+{
+	static FILE *fp;
+	static int checked;
+	static mach_timebase_info_data_t tb;
+
+	if (!checked) {
+		const char *env = getenv("NP2_DEBUG_MIDIINLOG");
+		checked = 1;
+		if (env && env[0]) {
+			fp = fopen("midiin.log", "w");
+		}
+		mach_timebase_info(&tb);
+	}
+	if (fp) {
+		double k = (double)tb.numer / tb.denom / 1e6;
+		fprintf(fp, "%.3f %.3f %.3f %02x\n",
+			midiport_lastreadtime(midi->hmidiin) * k, mach_absolute_time() * k, until * k, data);
+		fflush(fp);
+	}
+}
+#else
+#define midiin_log(midi, until, data)
+#endif
+
 static UINT
 midiread(COMMNG self, UINT8 *data)
 {
 	CMMIDI midi = (CMMIDI)(self + 1);
+	UINT64 until;
 
 	if (midi->opened & CMMIDI_MIDIIN) {
-		return midiport_read(midi->hmidiin, data);
+		until = midiin_until(midi);
+		if (midiport_read(midi->hmidiin, data, until)) {
+			midiin_log(midi, until, *data);
+			return 1;
+		}
 	}
 	return 0;
 }
