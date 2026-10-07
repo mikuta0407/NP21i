@@ -1,0 +1,112 @@
+diff --git a/sdl/scrnmng.c b/sdl/scrnmng.c
+index 2420246..2ff2092 100644
+--- a/sdl/scrnmng.c
++++ b/sdl/scrnmng.c
+@@ -161,9 +161,9 @@ BRESULT scrnmng_create(UINT8 mode) {
+ #endif
+ #if USE_SDL >= 3
+ 	if(mode & SCRNMODE_ROTATEMASK) {
+-		SDL_SetWindowRelativeMouseMode(scrnmng.height, true);
++		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.height, scrnmng.width, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	} else {
+-		SDL_SetWindowRelativeMouseMode(scrnmng.width, true);
++		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.width, scrnmng.height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	}
+ #else
+ 	if(mode & SCRNMODE_ROTATEMASK) {
+@@ -307,9 +307,9 @@ void scrnmng_setwidth(int posx, int width) {
+ 	}
+ #if USE_SDL >= 3
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+-		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.height, width, SDL_LOGICAL_PRESENTATION_STRETCH);
++		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.height, width, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	} else {
+-		SDL_SetRenderLogicalPresentation(s_renderer, width, scrnmng.height, SDL_LOGICAL_PRESENTATION_STRETCH);
++		SDL_SetRenderLogicalPresentation(s_renderer, width, scrnmng.height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	}
+ #else
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+@@ -395,9 +395,9 @@ void scrnmng_setheight(int posy, int height) {
+ 	}
+ #if USE_SDL >= 3
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+-		SDL_SetRenderLogicalPresentation(s_renderer, height, scrnmng.width, SDL_LOGICAL_PRESENTATION_STRETCH);
++		SDL_SetRenderLogicalPresentation(s_renderer, height, scrnmng.width, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	} else {
+-		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.width, height, SDL_LOGICAL_PRESENTATION_STRETCH);
++		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.width, height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	}
+ #else
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+@@ -688,7 +688,13 @@ scrnmng_update(void)
+ 	}
+ 	SDL_RenderClear(s_renderer);
+ #if USE_SDL >= 3
+-	SDL_RenderTexture(s_renderer, s_texture, NULL, NULL);
++	if (LOGICAL_PAD && !(scrnmode & SCRNMODE_ROTATEMASK)) {
++		SDL_FRect dst = {0, 0, 0, 0};
++		SDL_GetTextureSize(s_texture, &dst.w, &dst.h);
++		SDL_RenderTexture(s_renderer, s_texture, NULL, &dst);
++	} else {
++		SDL_RenderTexture(s_renderer, s_texture, NULL, NULL);
++	}
+ #else
+ 	if (LOGICAL_PAD && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+ 		SDL_Rect dst = {0, 0, 0, 0};
+@@ -746,9 +752,28 @@ void scrnmng_setbottompad(int pad)
+ 	}
+ 	s_bottompad = pad;
+ 	if (s_renderer && s_texture && !(scrnmode & SCRNMODE_ROTATEMASK)) {
++#if USE_SDL >= 3
++		float fw, fh;
++		SDL_GetTextureSize(s_texture, &fw, &fh);
++		w = (int)fw;
++		h = (int)fh;
++		SDL_SetRenderLogicalPresentation(s_renderer, w, h + pad, SDL_LOGICAL_PRESENTATION_LETTERBOX);
++#else
+ 		SDL_QueryTexture(s_texture, NULL, NULL, &w, &h);
+ 		SDL_RenderSetLogicalSize(s_renderer, w, h + pad);
++#endif
+ 		scrnmng_update();
+ 	}
+ }
+ #endif
++
++#if USE_SDL >= 3
++/* SDL3 reports mouse positions in window coordinates (SDL2 scaled them to
++ * the logical size by itself). */
++void scrnmng_converttoscreen(SDL_Event *event)
++{
++	if (s_renderer) {
++		SDL_ConvertEventToRenderCoordinates(s_renderer, event);
++	}
++}
++#endif
+diff --git a/sdl/scrnmng.h b/sdl/scrnmng.h
+index 20c5b49..9c418e1 100644
+--- a/sdl/scrnmng.h
++++ b/sdl/scrnmng.h
+@@ -100,6 +100,9 @@ void scrnmng_update(void);
+ #if defined(NP2_IOS_KEYBAR)
+ void scrnmng_setbottompad(int pad);
+ #endif
++#if USE_SDL >= 3
++void scrnmng_converttoscreen(SDL_Event *event);
++#endif
+ void scrnmng_updatecursor(void);
+ 
+ void scrnmng_updatefsres(void);
+diff --git a/sdl/taskmng.c b/sdl/taskmng.c
+index f50d378..aa4e19e 100644
+--- a/sdl/taskmng.c
++++ b/sdl/taskmng.c
+@@ -117,6 +117,9 @@ void taskmng_rol(void) {
+ 	if ((!task_avail) || (!SDL_PollEvent(&e))) {
+ 		return;
+ 	}
++#if USE_SDL >= 3
++	scrnmng_converttoscreen(&e);
++#endif
+ 	switch(e.type) {
+ #if USE_SDL >= 3
+ 		case SDL_EVENT_MOUSE_MOTION:

@@ -197,6 +197,8 @@ static NSString *unique_path(NSString *dir, NSString *name, NSString *dataDir)
 // ---- views
 
 static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard */
+static UIViewController *sdl_controller(void);
+static void setup_text_field(UIViewController *controller);
 
 @interface NP2KeyButton : UIButton
 @property (nonatomic) UINT8 code;
@@ -425,6 +427,9 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	}
 	else {
 		np21_starttextinput();
+		/* SDL3 sets the text input traits again on every start */
+		setup_text_field(sdl_controller());
+		[s_textfield reloadInputViews];
 	}
 }
 
@@ -942,6 +947,8 @@ static void setup_text_field(UIViewController *controller)
 		if ([field isKindOfClass:[UITextField class]]) {
 			UITextField *textField = field;
 			s_textfield = textField;
+			textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+			textField.autocorrectionType = UITextAutocorrectionTypeNo;
 			textField.keyboardType = UIKeyboardTypeASCIICapable;
 			textField.smartQuotesType = UITextSmartQuotesTypeNo;
 			textField.smartDashesType = UITextSmartDashesTypeNo;
