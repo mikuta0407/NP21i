@@ -32,7 +32,8 @@ void keybar_sethdd(unsigned char drv, const char *path);
  * "!dumphddmenu" (log the hard disk menu), "!settings", "!guide",
  * "!dismiss" (close what is presented), "!tap:<row title>" (on the settings screen),
  * "!newdisk:<index>:<MB>" (as on the new disk screen),
- * "!orient:portrait" / "!orient:landscape", "!showmenu" (open the ≡ menu). */
+ * "!orient:portrait" / "!orient:landscape", "!showmenu" (open the ≡ menu),
+ * "!dpad:up|down|left|right" (cross keys), "!dpad:toggle". */
 void keybar_debugcommand(const char *command);
 
 #ifdef __cplusplus

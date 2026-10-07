@@ -39,12 +39,13 @@ int SDL_main(int argc, char *argv[])
 	SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");
 	/* Without this SDL locks the orientation to landscape (the window is
 	 * wider than tall). iPadOS 26+ requires iPad apps to support every
-	 * orientation and would show the landscape content rotated. */
+	 * orientation and would show the landscape content rotated. iPhone:
+	 * portrait keeps the screen visible above the software keyboard. */
 	if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
 		SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait PortraitUpsideDown");
 	}
 	else {
-		SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+		SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait");
 	}
 	settings_initialize();
 	midiport_initialize();

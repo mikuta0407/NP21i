@@ -19,6 +19,7 @@
 #include "compiler.h"
 #include "keybar.h"
 #include "keyinput.h"
+#include "dpad.h"
 #include "lifecycle.h"
 #include "settings.h"
 #include "settingsview.h"
@@ -50,6 +51,8 @@ static const CGFloat kGap = 4;
 static const CGFloat kGroupGap = 12;
 
 static NSString *const kHiddenKey = @"keybar_hidden";
+static NSString *const kDPadPortraitKey = @"dpad_portrait";		/* below the bar, default on */
+static NSString *const kDPadLandscapeKey = @"dpad_landscape";	/* over the screen, default off */
 static NSString *const kFddDir = @"fdd";
 static NSString *const kHddDir = @"hdd";
 
@@ -219,6 +222,8 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	UIScrollView *_scroll;
 	UIButton *_menuButton;
 	UIButton *_softkbdButton;
+	UIButton *_dpadButton;
+	NP2DPad *_dpad;
 	UIButton *_hideButton;
 	UIButton *_showButton;
 	UILabel *_speedLabel;
@@ -275,6 +280,14 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	_softkbdButton = [self symbolButton:@"keyboard" label:@"softkbd"];
 	[_softkbdButton addTarget:self action:@selector(toggleSoftKeyboard) forControlEvents:UIControlEventTouchUpInside];
 	[_bar addSubview:_softkbdButton];
+
+	_dpadButton = [self symbolButton:@"dpad" label:@"dpad"];
+	[_dpadButton addTarget:self action:@selector(toggleDPad) forControlEvents:UIControlEventTouchUpInside];
+	[_bar addSubview:_dpadButton];
+
+	[[NSUserDefaults standardUserDefaults] registerDefaults:@{ kDPadPortraitKey: @YES, kDPadLandscapeKey: @NO }];
+	_dpad = [[NP2DPad alloc] initWithFrame:CGRectZero];
+	[self addSubview:_dpad];
 
 	_hideButton = [self symbolButton:@"chevron.down" label:@"hide"];
 	[_hideButton addTarget:self action:@selector(hideBar) forControlEvents:UIControlEventTouchUpInside];
@@ -415,6 +428,26 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		_speedLabel.hidden = !show;
 		[self setNeedsLayout];
 	}
+}
+
+- (BOOL)isPortrait
+{
+	return self.bounds.size.height > self.bounds.size.width;
+}
+
+/* Portrait and landscape remember their own choice: the cross keys have
+ * room of their own below the bar in portrait, but cover the screen in
+ * landscape. */
+- (NSString *)dpadKey
+{
+	return [self isPortrait] ? kDPadPortraitKey : kDPadLandscapeKey;
+}
+
+- (void)toggleDPad
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+	[defaults setBool:![defaults boolForKey:[self dpadKey]] forKey:[self dpadKey]];
+	[self setNeedsLayout];
 }
 
 - (void)toggleSoftKeyboard
@@ -785,6 +818,8 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		[self layoutHorizontal:frame.size];
 	}
 
+	[self layoutDPadBelow:frame vertical:vertical keyboardTop:bottom];
+
 	/* top right, left of the bar when that is a column there */
 	CGSize speed = CGSizeMake(84, 22);
 	CGFloat right = (vertical && !_hidden) ? CGRectGetMinX(frame) : bounds.size.width - safe.right;
@@ -795,14 +830,48 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 		bounds.size.height - MAX(safe.bottom, kGap) - show.height, show.width, show.height);
 }
 
+/* Portrait: in the space below the bar, at the bottom right (thumb).
+ * Landscape: over the bottom left of the screen when turned on. */
+- (void)layoutDPadBelow:(CGRect)barFrame vertical:(BOOL)vertical keyboardTop:(CGFloat)keyboardTop
+{
+	CGRect bounds = self.bounds;
+	UIEdgeInsets safe = self.safeAreaInsets;
+	BOOL keyboard = keyboardTop < bounds.size.height;
+	BOOL wanted = [[NSUserDefaults standardUserDefaults] boolForKey:[self dpadKey]];
+	BOOL phone = (self.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPhone);
+	CGRect frame = CGRectZero;
+
+	if (_hidden || keyboard || !wanted) {
+		/* nothing */
+	}
+	else if ([self isPortrait]) {
+		CGFloat top = CGRectGetMaxY(barFrame) + 12;
+		CGFloat bottom = bounds.size.height - MAX(safe.bottom, 12) - 12;
+		CGFloat size = MIN(MIN(bottom - top, bounds.size.width * 0.55), 240);
+		if (size >= 110) {
+			frame = CGRectMake(bounds.size.width - safe.right - 24 - size, bottom - size, size, size);
+		}
+	}
+	else {
+		CGFloat size = phone ? 130 : 170;
+		CGFloat bottom = vertical ? bounds.size.height - MAX(safe.bottom, 12) - 8 : CGRectGetMinY(barFrame) - 12;
+		frame = CGRectMake(safe.left + 16, bottom - size, size, size);
+	}
+	_dpad.hidden = CGRectIsEmpty(frame);
+	_dpad.frame = frame;
+	_dpad.overlay = ![self isPortrait];
+	_dpadButton.tintColor = wanted ? UIColor.systemOrangeColor : UIColor.whiteColor;
+}
+
 - (void)layoutHorizontal:(CGSize)size
 {
 	CGFloat h = size.height - kGap * 2;
 	CGFloat icon = MAX(h, 36);
 	_menuButton.frame = CGRectMake(kGap, kGap, icon, h);
 	_softkbdButton.frame = CGRectMake(kGap + icon, kGap, icon, h);
+	_dpadButton.frame = CGRectMake(kGap + icon * 2, kGap, icon, h);
 	_hideButton.frame = CGRectMake(size.width - kGap - icon, kGap, icon, h);
-	CGFloat left = CGRectGetMaxX(_softkbdButton.frame) + kGap;
+	CGFloat left = CGRectGetMaxX(_dpadButton.frame) + kGap;
 	_scroll.frame = CGRectMake(left, 0, CGRectGetMinX(_hideButton.frame) - kGap - left, size.height);
 
 	CGFloat x = 0;
@@ -824,8 +893,9 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	CGFloat h = 34;
 	_menuButton.frame = CGRectMake(kGap, kGap, w, h);
 	_softkbdButton.frame = CGRectMake(kGap, kGap + h, w, h);
+	_dpadButton.frame = CGRectMake(kGap, kGap + h * 2, w, h);
 	_hideButton.frame = CGRectMake(kGap, size.height - kGap - h, w, h);
-	CGFloat top = CGRectGetMaxY(_softkbdButton.frame) + kGap;
+	CGFloat top = CGRectGetMaxY(_dpadButton.frame) + kGap;
 	_scroll.frame = CGRectMake(0, top, size.width, CGRectGetMinY(_hideButton.frame) - kGap - top);
 
 	CGFloat y = 0;
@@ -891,6 +961,16 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 			[self.window.windowScene requestGeometryUpdateWithPreferences:prefs errorHandler:^(NSError *error) {
 				NSLog(@"keybar: orientation request failed: %@", error);
 			}];
+		}
+	}
+	else if ([command hasPrefix:@"!dpad:"]) {
+		/* "!dpad:up" etc. presses an arrow; "!dpad:toggle" is the bar button */
+		NSString *arg = [command substringFromIndex:6];
+		if ([arg isEqualToString:@"toggle"]) {
+			[self toggleDPad];
+		}
+		else {
+			[_dpad tapDirection:arg];
 		}
 	}
 	else if ([command isEqualToString:@"!showmenu"]) {
