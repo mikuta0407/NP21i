@@ -62,7 +62,8 @@ static BOOL s_softkeyboard;
 static BOOL s_shiftheld[2];					/* physical left / right SHIFT */
 static UINT8 s_converted[NP21_NUM_SCANCODES];	/* PC-98 key sent for a converted key, 0 = none */
 static int s_shiftadjust[NP21_NUM_SCANCODES];	/* +1 SHIFT pressed / -1 released for it */
-static BOOL s_latched[0x80];				/* on-screen modifiers */
+static BOOL s_latched[0x80];				/* on-screen modifiers, latched */
+static BOOL s_held[0x80];					/* ... held by a finger */
 
 static void changed(void)
 {
@@ -73,7 +74,7 @@ static void changed(void)
 
 static BOOL shift_down(void)
 {
-	return s_shiftheld[0] || s_shiftheld[1] || s_latched[PC98KEY_SHIFT];
+	return s_shiftheld[0] || s_shiftheld[1] || s_latched[PC98KEY_SHIFT] || s_held[PC98KEY_SHIFT];
 }
 
 static void release_latched(void)
@@ -82,7 +83,9 @@ static void release_latched(void)
 	for (UINT i = 0; i < NELEMENTS(s_latched); i++) {
 		if (s_latched[i]) {
 			s_latched[i] = FALSE;
-			keystat_keyup((REG8)i);
+			if (!s_held[i]) {
+				keystat_keyup((REG8)i);
+			}
 			any = TRUE;
 		}
 	}
@@ -235,9 +238,11 @@ void keyinput_up(UINT8 key)
 void keyinput_togglemodifier(UINT8 key)
 {
 	if (key == PC98KEY_CAPS || key == PC98KEY_KANA) {
-		/* lock keys: each press toggles */
-		keystat_keydown(key);
-		keystat_keyup(key);
+		/* lock keys: each press toggles. The real keys lock mechanically;
+		 * NP2's key table has that kind at 0x81 (CAPS) / 0x82 (KANA), which
+		 * toggle on key down. (0x71 / 0x72 are down only while held.) */
+		keystat_keydown((REG8)(key + 0x10));
+		keystat_keyup((REG8)(key + 0x10));
 	}
 	else if (s_latched[key]) {
 		s_latched[key] = FALSE;
@@ -255,5 +260,31 @@ BOOL keyinput_isactive(UINT8 key)
 	if (key == PC98KEY_CAPS || key == PC98KEY_KANA) {
 		return keystat.ref[key] != NKEYREF_NC;
 	}
-	return s_latched[key & 0x7f];
+	return s_latched[key & 0x7f] || s_held[key & 0x7f];
+}
+
+void keyinput_holdmodifier(UINT8 key)
+{
+	key &= 0x7f;
+	if (!s_held[key] && !s_latched[key]) {
+		keystat_keydown(key);
+	}
+	s_held[key] = TRUE;
+	changed();
+}
+
+void keyinput_releasemodifier(UINT8 key, BOOL latch)
+{
+	key &= 0x7f;
+	if (!s_held[key]) {
+		return;
+	}
+	s_held[key] = FALSE;
+	if (latch) {
+		s_latched[key] = TRUE;		/* stays down */
+	}
+	else if (!s_latched[key]) {
+		keystat_keyup(key);
+	}
+	changed();
 }

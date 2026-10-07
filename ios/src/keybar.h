@@ -33,7 +33,10 @@ void keybar_sethdd(unsigned char drv, const char *path);
  * "!dismiss" (close what is presented), "!tap:<row title>" (on the settings screen),
  * "!newdisk:<index>:<MB>" (as on the new disk screen),
  * "!orient:portrait" / "!orient:landscape", "!showmenu" (open the ≡ menu),
- * "!dpad:up|down|left|right" (cross keys), "!dpad:toggle". */
+ * "!dpad:up|down|left|right" (cross keys), "!dpad:toggle",
+ * "!kbdkind:<pc98|system>" (choose and show a screen keyboard; "!softkbd"
+ * toggles it), "!kbdtap:<key id>" (tap a key on the app's keyboard, see
+ * kbdlayout.m), "!kbdblock:<n>" (its tab when paged). */
 void keybar_debugcommand(const char *command);
 
 #ifdef __cplusplus

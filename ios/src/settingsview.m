@@ -480,7 +480,22 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"キーボード", @"JIS はキーの位置どおり、US は記号をキートップの文字どおりに入力します。ソフトウェアキーボードは常に文字どおりです。", @[
+	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもので、iOS のキーボードは文字どおりに入力します。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。", @[
+		detail_row(@"画面のキーボード", ^NSString *{
+			return settings_screenkeyboardtitle(settings_screenkeyboard());
+		}, ^(UIViewController *c) {
+			NSArray<NSString *> *identifiers = settings_screenkeyboards();
+			NSMutableArray<NSString *> *labels = [NSMutableArray array];
+			for (NSString *identifier in identifiers) {
+				[labels addObject:settings_screenkeyboardtitle(identifier)];
+			}
+			[c.navigationController pushViewController:choice_screen(@"画面のキーボード", nil, labels, ^NSInteger {
+				NSUInteger index = [identifiers indexOfObject:settings_screenkeyboard()];
+				return (index == NSNotFound) ? -1 : (NSInteger)index;
+			}, ^(NSInteger index) {
+				[defaults setObject:identifiers[(NSUInteger)index] forKey:kSettingScreenKeyboard];
+			}) animated:YES];
+		}),
 		detail_row(@"ハードウェアキーボードの配列", ^NSString *{
 			return ([defaults integerForKey:kSettingKeyboardLayout] == KEYLAYOUT_US) ? @"US" : @"JIS";
 		}, ^(UIViewController *c) {

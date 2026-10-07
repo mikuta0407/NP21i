@@ -17,6 +17,14 @@ extern NSString *const kSettingKeyboardLayout;		/* KEYLAYOUT_JIS / KEYLAYOUT_US 
 extern NSString *const kSettingRunInBackground;		/* BOOL */
 extern NSString *const kSettingResume;				/* BOOL */
 extern NSString *const kSettingShowSpeed;			/* BOOL */
+extern NSString *const kSettingScreenKeyboard;		/* kScreenKeyboardSystem or an NP2KeyboardLayout identifier */
+extern NSString *const kScreenKeyboardSystem;		/* the iOS software keyboard */
+
+/* What the keyboard button shows: kScreenKeyboardSystem or a layout identifier. */
+NSString *settings_screenkeyboard(void);
+/* The choices for it, in menu order, and their names. */
+NSArray<NSString *> *settings_screenkeyboards(void);
+NSString *settings_screenkeyboardtitle(NSString *identifier);
 #endif
 
 #ifdef __cplusplus

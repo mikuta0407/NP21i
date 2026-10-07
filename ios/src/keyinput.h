@@ -64,6 +64,12 @@ void keyinput_up(UINT8 key);
 void keyinput_togglemodifier(UINT8 key);
 BOOL keyinput_isactive(UINT8 key);
 
+/* SHIFT / CTRL / GRPH held down by a finger on the on-screen keyboard. When
+ * nothing else was pressed meanwhile (a tap), release with latch = TRUE: the
+ * modifier then stays down for the next key, as keyinput_togglemodifier(). */
+void keyinput_holdmodifier(UINT8 key);
+void keyinput_releasemodifier(UINT8 key, BOOL latch);
+
 /* Called when the state shown by keyinput_isactive() may have changed. */
 extern void (*keyinput_onchange)(void);
 

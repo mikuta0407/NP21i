@@ -12,6 +12,11 @@
  * beside it on iPhone), over the screen when there is none, and above the
  * software keyboard while that is shown. It can be folded away.
  *
+ * The keyboard button shows the keyboard chosen in the settings (long press
+ * to choose): the app's own (kbdview.h, a PC-98 keyboard or another layout)
+ * or iOS's. The app's own keyboard makes the PC-98 screen smaller to stay
+ * above it.
+ *
  * Runs on the main thread, which is also where the emulator runs (SDL pumps
  * the UIKit run loop from its event loop), so the core is called directly.
  */
@@ -20,6 +25,7 @@
 #include "keybar.h"
 #include "keyinput.h"
 #include "dpad.h"
+#include "kbdview.h"
 #include "lifecycle.h"
 #include "settings.h"
 #include "settingsview.h"
@@ -223,6 +229,8 @@ static void setup_text_field(UIViewController *controller);
 	UIScrollView *_scroll;
 	UIButton *_menuButton;
 	UIButton *_softkbdButton;
+	NP2KeyboardView *_screenKeyboard;	/* the app's own keyboard, nil until first shown */
+	BOOL _screenKeyboardShown;
 	UIButton *_dpadButton;
 	NP2DPad *_dpad;
 	UIButton *_hideButton;
@@ -280,6 +288,7 @@ static void setup_text_field(UIViewController *controller);
 
 	_softkbdButton = [self symbolButton:@"keyboard" label:@"softkbd"];
 	[_softkbdButton addTarget:self action:@selector(toggleSoftKeyboard) forControlEvents:UIControlEventTouchUpInside];
+	_softkbdButton.menu = [self keyboardMenu];		/* long press */
 	[_bar addSubview:_softkbdButton];
 
 	_dpadButton = [self symbolButton:@"dpad" label:@"dpad"];
@@ -313,6 +322,7 @@ static void setup_text_field(UIViewController *controller);
 	NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
 	[nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
 	[nc addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+	[nc addObserver:self selector:@selector(settingsChanged) name:NSUserDefaultsDidChangeNotification object:nil];
 
 	/* CAPS / KANA also change from the hardware keyboard */
 	__weak NP2KeyBar *weakSelf = self;
@@ -395,6 +405,7 @@ static void setup_text_field(UIViewController *controller);
 
 - (void)refreshModifiers
 {
+	[_screenKeyboard refreshStates];
 	for (NP2KeyButton *button in _keys) {
 		if (button.kind == KeyKindModifier) {
 			button.backgroundColor = keyinput_isactive(button.code)
@@ -453,16 +464,102 @@ static void setup_text_field(UIViewController *controller);
 
 - (void)toggleSoftKeyboard
 {
+	/* with a hardware keyboard, iOS shows only a thin shortcut bar */
+	BOOL systemShown = _softKeyboardShown && CGRectGetHeight(_keyboardFrame) > 150;
+	if (_screenKeyboardShown || systemShown) {
+		[self hideKeyboards];
+	}
+	else {
+		[self showKeyboard];
+	}
+}
+
+- (void)showKeyboard
+{
+	NP2KeyboardLayout *layout = [NP2KeyboardLayout layoutWithIdentifier:settings_screenkeyboard()];
+	if (layout == nil) {
+		[self setScreenKeyboardShown:NO];
+		[self showSystemKeyboard];
+		return;
+	}
+	if (_softKeyboardShown) {
+		np21_stoptextinput();
+	}
+	if (_screenKeyboard == nil) {
+		_screenKeyboard = [[NP2KeyboardView alloc] initWithLayout:layout];
+		[self addSubview:_screenKeyboard];
+		[self bringSubviewToFront:_bar];
+	}
+	_screenKeyboard.layout = layout;
+	[self setScreenKeyboardShown:YES];
+}
+
+- (void)hideKeyboards
+{
+	[self setScreenKeyboardShown:NO];
 	/* SDL enables text input from the start without showing the keyboard,
 	 * so look at the keyboard itself. */
 	if (_softKeyboardShown) {
 		np21_stoptextinput();
 	}
-	else {
-		np21_starttextinput();
-		/* SDL3 sets the text input traits again on every start */
-		setup_text_field(sdl_controller());
-		[s_textfield reloadInputViews];
+}
+
+- (void)showSystemKeyboard
+{
+	np21_starttextinput();
+	/* SDL3 sets the text input traits again on every start */
+	setup_text_field(sdl_controller());
+	[s_textfield reloadInputViews];
+}
+
+- (void)setScreenKeyboardShown:(BOOL)shown
+{
+	if (shown != _screenKeyboardShown) {
+		_screenKeyboardShown = shown;
+		_screenKeyboard.hidden = !shown;
+		[self setNeedsLayout];
+	}
+}
+
+/* The keyboard button's long press: which keyboard it shows. */
+- (UIMenu *)keyboardMenu
+{
+	__weak NP2KeyBar *weakSelf = self;
+	UIDeferredMenuElement *choices = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+		NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
+		NSString *current = settings_screenkeyboard();
+		for (NSString *identifier in settings_screenkeyboards()) {
+			UIAction *action = [UIAction actionWithTitle:settings_screenkeyboardtitle(identifier) image:nil identifier:nil handler:^(UIAction *a) {
+				(void)a;
+				[weakSelf chooseKeyboard:identifier];
+			}];
+			action.state = [identifier isEqualToString:current] ? UIMenuElementStateOn : UIMenuElementStateOff;
+			[items addObject:action];
+		}
+		completion(items);
+	}];
+	return [UIMenu menuWithTitle:@"画面のキーボード" children:@[ choices ]];
+}
+
+- (void)chooseKeyboard:(NSString *)identifier
+{
+	[[NSUserDefaults standardUserDefaults] setObject:identifier forKey:kSettingScreenKeyboard];
+	[self hideKeyboards];
+	[self showKeyboard];
+}
+
+/* The settings screen can change the keyboard while one is shown. */
+- (void)settingsChanged
+{
+	if (_screenKeyboardShown) {
+		NP2KeyboardLayout *layout = [NP2KeyboardLayout layoutWithIdentifier:settings_screenkeyboard()];
+		if (layout == nil) {
+			[self setScreenKeyboardShown:NO];
+		}
+		else if (layout != _screenKeyboard.layout) {
+			_screenKeyboard.layout = layout;
+			[self setNeedsLayout];
+		}
 	}
 }
 
@@ -717,6 +814,9 @@ static void setup_text_field(UIViewController *controller);
 
 - (void)applyHidden
 {
+	if (_hidden) {
+		[self hideKeyboards];
+	}
 	_bar.hidden = _hidden;
 	_showButton.hidden = !_hidden;
 	[self setNeedsLayout];
@@ -726,6 +826,9 @@ static void setup_text_field(UIViewController *controller);
 {
 	_keyboardFrame = [note.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
 	_softKeyboardShown = CGRectGetMinY(_keyboardFrame) < CGRectGetMaxY(UIScreen.mainScreen.bounds);
+	if (_softKeyboardShown && CGRectGetHeight(_keyboardFrame) > 150) {
+		[self setScreenKeyboardShown:NO];	/* one keyboard at a time */
+	}
 	/* With a hardware keyboard iOS shows only a thin shortcut bar; keys
 	 * typed on a full software keyboard arrive as US positions. */
 	keyinput_setsoftkeyboard(_softKeyboardShown && CGRectGetHeight(_keyboardFrame) > 150);
@@ -762,10 +865,28 @@ static void setup_text_field(UIViewController *controller);
 	_screenSize = CGSizeMake(sw, sh);
 	CGFloat sideGap = (viewW - sw * MIN(viewW / sw, viewH / sh)) / 2 - MAX(safe.left, safe.right);
 
+	/* the app's own keyboard: at the bottom, at most about half the height */
+	CGFloat keyboardHeight = 0;
+	if (_screenKeyboardShown) {
+		CGFloat maxHeight = viewH * ((viewH > viewW) ? 0.45 : 0.5) - safe.bottom;
+		keyboardHeight = [_screenKeyboard heightForWidth:viewW - safe.left - safe.right maxHeight:maxHeight] + safe.bottom;
+		_screenKeyboard.frame = CGRectMake(0, viewH - keyboardHeight, viewW, keyboardHeight);
+	}
+
 	/* Wide screens (iPad) leave little room below; make SDL leave a band
 	 * for the bar, shrinking the screen a little. */
 	int pad = 0;
-	if (!_hidden && viewH > viewW) {
+	if (_screenKeyboardShown) {
+		/* the screen above the bar and the keyboard: shrink it to fit */
+		CGFloat available = viewH - keyboardHeight - kOverlayBarHeight;
+		if (viewW / sw <= available / sh) {
+			pad = MAX(0, (int)((viewH - 2 * safe.top) / (viewW / sw)) - sh);	/* at the top, full width */
+		}
+		else {
+			pad = MAX(0, (int)ceil(viewH / (available / sh)) - sh);			/* at the top, centered */
+		}
+	}
+	else if (!_hidden && viewH > viewW) {
 		/* portrait (iPad): screen at the top, the bar and the software
 		 * keyboard below it */
 		pad = MAX(0, (int)((viewH - 2 * safe.top) / (viewW / sw)) - sh);
@@ -785,8 +906,8 @@ static void setup_text_field(UIViewController *controller);
 	CGFloat screenBottom = (viewH - (sh + pad) * scale) / 2 + sh * scale;
 	CGFloat bottomGap = viewH - screenBottom;
 
-	CGFloat bottom = bounds.size.height;
-	if (!CGRectIsNull(_keyboardFrame) && self.window) {
+	CGFloat bottom = bounds.size.height - keyboardHeight;
+	if (!CGRectIsNull(_keyboardFrame) && self.window && !_screenKeyboardShown) {
 		CGRect kb = [self convertRect:_keyboardFrame fromView:nil];
 		if (CGRectGetMinY(kb) < bottom && CGRectGetHeight(kb) > 0) {
 			bottom = CGRectGetMinY(kb);
@@ -865,6 +986,7 @@ static void setup_text_field(UIViewController *controller);
 	_dpad.frame = frame;
 	_dpad.overlay = ![self isPortrait];
 	_dpadButton.tintColor = wanted ? UIColor.systemOrangeColor : UIColor.whiteColor;
+	_softkbdButton.tintColor = (_screenKeyboardShown || keyboard) ? UIColor.systemOrangeColor : UIColor.whiteColor;
 }
 
 - (void)layoutHorizontal:(CGSize)size
@@ -1002,6 +1124,20 @@ static void setup_text_field(UIViewController *controller);
 	}
 	else if ([command isEqualToString:@"!show"]) {
 		[self showBar];
+	}
+	else if ([command hasPrefix:@"!kbdkind:"]) {
+		/* "!kbdkind:pc98" / "!kbdkind:system": as chosen in the button's menu */
+		[self chooseKeyboard:[command substringFromIndex:9]];
+	}
+	else if ([command hasPrefix:@"!kbdtap:"]) {
+		/* "!kbdtap:<key id>" taps a key on the app's keyboard */
+		NSString *identifier = [command substringFromIndex:8];
+		if (![_screenKeyboard tapKey:identifier]) {
+			NSLog(@"keybar: no key %@", identifier);
+		}
+	}
+	else if ([command hasPrefix:@"!kbdblock:"]) {
+		[_screenKeyboard showBlock:[command substringFromIndex:10].integerValue];
 	}
 	else if ([command isEqualToString:@"!softkbd"]) {
 		[self toggleSoftKeyboard];
