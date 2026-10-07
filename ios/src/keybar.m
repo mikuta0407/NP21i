@@ -25,8 +25,7 @@
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
+#include "sdlcompat.h"
 #include <pccore.h>
 #include <nevent.h>
 #include <fdd/diskdrv.h>
@@ -422,10 +421,10 @@ static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard *
 	/* SDL enables text input from the start without showing the keyboard,
 	 * so look at the keyboard itself. */
 	if (_softKeyboardShown) {
-		SDL_StopTextInput();
+		np21_stoptextinput();
 	}
 	else {
-		SDL_StartTextInput();
+		np21_starttextinput();
 	}
 }
 
@@ -950,18 +949,7 @@ static void setup_text_field(UIViewController *controller)
 
 static UIViewController *sdl_controller(void)
 {
-	for (Uint32 id = 1; id < 8; id++) {
-		SDL_Window *window = SDL_GetWindowFromID(id);
-		if (window == NULL) {
-			continue;
-		}
-		SDL_SysWMinfo info;
-		SDL_VERSION(&info.version);
-		if (SDL_GetWindowWMInfo(window, &info) && info.subsystem == SDL_SYSWM_UIKIT) {
-			return info.info.uikit.window.rootViewController;
-		}
-	}
-	return nil;
+	return np21_sdl_uiwindow().rootViewController;
 }
 
 void keybar_initialize(void)

@@ -23,7 +23,7 @@
 
 #ifndef NDEBUG
 
-#include <SDL2/SDL.h>
+#include "sdlcompat.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,13 +35,7 @@
 
 static void push_key(SDL_Scancode sc, BOOL down)
 {
-	SDL_Event e;
-	SDL_zero(e);
-	e.type = down ? SDL_KEYDOWN : SDL_KEYUP;
-	e.key.state = down ? SDL_PRESSED : SDL_RELEASED;
-	e.key.keysym.scancode = sc;
-	e.key.keysym.sym = SDL_GetKeyFromScancode(sc);
-	SDL_PushEvent(&e);
+	np21_pushkey(sc, down);
 }
 
 static void run_script(char *script)
