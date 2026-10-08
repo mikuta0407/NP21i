@@ -630,7 +630,8 @@ static UIViewController *help_screen(void)
 				@"SHIFT・CTRL・GRPH はタップすると次のキーにだけ効き、押さえたままにすると押している間だけ効きます。",
 			]),
 			topic(@"画面のキーボード", @[
-				@"画面のキーボードは、隠さない限り出たままで、次に起動したときも出ます。キーボードの上の「PC-98 / レコンポーザ / ゲーム / iOS」で、すぐに切り替えられます（iOS のキーボードの上にも同じものが出ます）。",
+				@"キーボードの上端のつまみを上下にドラッグすると高さを変えられます。ダブルタップで標準の高さに戻ります（設定 →「キーボード」でも）。",
+				@"画面のキーボードは、隠さない限り出たままで、次に起動したときも出ます。キーボードの上の「PC-98 / RCP（レコンポーザ） / ゲーム / iOS」で、すぐに切り替えられます（iOS のキーボードの上にも同じものが出ます）。",
 				@"PC-98 キーボードは「メイン」と「編集・テンキー」に分かれています（幅が足りないときはタブで切り替え）。",
 				@"レコンポーザ（ステップ入力）は、EDIT（f·3）のトラックエディタで音符を打つためのキーボードです。音名（ド〜シ）、♯ / ♭、オクターブの数字を押してから、音の長さ（f·1 全音符〜f·10 32 分音符）か「入力」で入ります（例: ド ♯ 5 → 4分）。オクターブは前の音符のものが続きます。右側はコピー・削除・取り消し・小節の移動・再生などのコマンドです（キーの左上が元のキー、^ は CTRL）。",
 				@"和音は、根音を打って（例: ファ ♯）「和音」（TAB）を押し、「和音」ブロックで種類（m、7、maj7 など）を選んで「入力」です。転回↑↓で転回形を変えられます。長さは直前の音符と同じで、入れたあと ↓ で次のステップへ進みます。",
@@ -1046,7 +1047,7 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもの、レコンポーザ（ステップ入力）は音名・音の長さ・編集コマンドを並べたもの、ゲーム用キーボードは十字キーと Z / X / スペース / リターンなどを大きくしたもので、iOS のキーボードは文字どおりに入力します。どれを使うかは環境ごとに覚えます。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。振動と文字の大きな表示は、PC-98 キーボードを押したときのものです。長押しで連続入力は、押し続けたキーを 0.5 秒後から繰り返します（NP2 メニューの Key-repeat と同じ設定です）。", @[
+	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもの、レコンポーザ（ステップ入力）は音名・音の長さ・編集コマンドを並べたもの、ゲーム用キーボードは十字キーと Z / X / スペース / リターンなどを大きくしたもので、iOS のキーボードは文字どおりに入力します。どれを使うかは環境ごとに覚えます。高さはどのキーボードも同じで、キーボード上端のつまみを上下にドラッグしても変えられます（ダブルタップで標準に戻ります）。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。振動と文字の大きな表示は、PC-98 キーボードを押したときのものです。長押しで連続入力は、押し続けたキーを 0.5 秒後から繰り返します（NP2 メニューの Key-repeat と同じ設定です）。", @[
 		detail_row(@"画面のキーボード", ^NSString *{
 			return settings_screenkeyboardtitle(settings_screenkeyboard());
 		}, ^(UIViewController *c) {
@@ -1061,6 +1062,16 @@ static NSArray<NP2Section *> *settings_sections(void)
 			}, ^(NSInteger index) {
 				[defaults setObject:identifiers[(NSUInteger)index] forKey:kSettingScreenKeyboard];
 			}) animated:YES];
+		}),
+		slider_row(@"キーボードの高さ", KEYBOARD_HEIGHT_MIN, KEYBOARD_HEIGHT_MAX, ^float {
+			return (float)[defaults integerForKey:kSettingKeyboardHeight];
+		}, ^(float v, BOOL done) {
+			(void)done;
+			[defaults setInteger:lroundf(v) forKey:kSettingKeyboardHeight];
+		}),
+		button_row(@"キーボードの高さを標準に戻す", ^(UIViewController *c) {
+			[defaults setInteger:100 forKey:kSettingKeyboardHeight];
+			[(NP2TableViewController *)c reload];
 		}),
 		toggle_row(@"キーを押したときに振動", ^BOOL { return settings_keyhaptics(); }, ^(BOOL on) {
 			[defaults setBool:on forKey:kSettingKeyHaptics];

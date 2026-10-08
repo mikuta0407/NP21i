@@ -21,6 +21,9 @@ extern NSString *const kSettingShowSpeed;			/* BOOL */
 extern NSString *const kSettingScreenKeyboard;		/* kScreenKeyboardSystem or an NP2KeyboardLayout identifier */
 extern NSString *const kScreenKeyboardSystem;		/* the iOS software keyboard */
 extern NSString *const kSettingScreenKeyboardShown;	/* BOOL: the keyboard was last left shown (default YES) */
+extern NSString *const kSettingKeyboardHeight;		/* the app's keyboard's height, % of the standard (100) */
+#define KEYBOARD_HEIGHT_MIN	50
+#define KEYBOARD_HEIGHT_MAX	200
 extern NSString *const kSettingKeyHaptics;			/* BOOL: the app's keyboard taps back */
 extern NSString *const kSettingKeyPreview;			/* BOOL: the app's keyboard shows pressed characters larger */
 extern NSString *const kSettingLandscapeFold;		/* half open and wider than tall: 0 keyboard below, 1 screen left, 2 screen right */

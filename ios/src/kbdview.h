@@ -33,6 +33,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) NSInteger switchIndex;
 @property (nonatomic, copy, nullable) void (^onSwitch)(NSInteger index);
 
+/* A handle along the top edge: dragging it reports how far (points, down
+ * positive) since the drag began, and whether it ended; a double tap asks
+ * for the standard height. The owner sets the frame. */
+@property (nonatomic) BOOL showsResizeHandle;
+@property (nonatomic, copy, nullable) void (^onResize)(CGFloat dy, BOOL ended);
+@property (nonatomic, copy, nullable) void (^onResetSize)(void);
+
 /* A light tap felt on each key press (default YES). */
 @property (nonatomic) BOOL hapticFeedback;
 /* Character keys show what they type, larger, above the finger while

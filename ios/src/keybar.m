@@ -224,6 +224,20 @@ static NSString *unique_path(NSString *dir, NSString *name, NSString *dataDir)
 
 // ---- views
 
+@class NP2KeyboardView;
+/* The PC-98 keyboard as shown (with its switcher and handle), to measure
+ * the height every keyboard gets. */
+static NP2KeyboardView *standard_keyboard(void)
+{
+	static NP2KeyboardView *view;
+	if (view == nil) {
+		view = [[NP2KeyboardView alloc] initWithLayout:[NP2KeyboardLayout pc98Layout]];
+		view.switchTitles = settings_screenkeyboards();
+		view.showsResizeHandle = YES;
+	}
+	return view;
+}
+
 static __weak UITextField *s_textfield;	/* SDL's, behind the software keyboard */
 static UIViewController *sdl_controller(void);
 static void setup_text_field(UIViewController *controller);
@@ -264,6 +278,9 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	NP2KeyboardView *_screenKeyboard;	/* the app's own keyboard, nil until first shown */
 	BOOL _screenKeyboardShown;
 	UISegmentedControl *_systemSwitcher;	/* above iOS's keyboard */
+	CGFloat _standardKeyboardHeight;	/* the PC-98 keyboard's, for this width (without the safe area) */
+	CGFloat _dragStartHeight;			/* resizing the keyboard: its height when the drag began */
+	CGFloat _dragPercent;				/* ... and the % meanwhile, 0 when not dragging */
 	NP2HingePosture _hinge;
 	NP2Fold _fold;			/* folded: the keyboard takes part of the screen */
 	BOOL _shownForFold;		/* the keyboard came up by itself when folded */
@@ -944,6 +961,29 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	}
 }
 
+/* The handle on the keyboard: dragged, the keyboard follows; let go, the
+ * height is kept (as a % of the standard, for every keyboard). */
+- (void)resizeKeyboardBy:(CGFloat)dy ended:(BOOL)ended
+{
+	if (_standardKeyboardHeight <= 0) {
+		return;
+	}
+	if (_dragPercent == 0) {
+		_dragStartHeight = _screenKeyboard.frame.size.height - self.safeAreaInsets.bottom;
+	}
+	CGFloat percent = (_dragStartHeight - dy) / _standardKeyboardHeight * 100;
+	percent = MIN(MAX(percent, KEYBOARD_HEIGHT_MIN), KEYBOARD_HEIGHT_MAX);
+	if (ended) {
+		_dragPercent = 0;
+		[[NSUserDefaults standardUserDefaults] setInteger:lround(percent) forKey:kSettingKeyboardHeight];
+	}
+	else {
+		_dragPercent = percent;
+	}
+	[self setNeedsLayout];
+	[self layoutIfNeeded];
+}
+
 - (void)setUpSwitcher
 {
 	NSMutableArray<NSString *> *titles = [NSMutableArray array];
@@ -1005,6 +1045,16 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	}
 	_screenKeyboard.layout = layout;
 	[self setUpSwitcher];
+	if (!_screenKeyboard.showsResizeHandle) {
+		__weak NP2KeyBar *weakSelf = self;
+		_screenKeyboard.showsResizeHandle = YES;
+		_screenKeyboard.onResize = ^(CGFloat dy, BOOL ended) {
+			[weakSelf resizeKeyboardBy:dy ended:ended];
+		};
+		_screenKeyboard.onResetSize = ^{
+			[[NSUserDefaults standardUserDefaults] setInteger:100 forKey:kSettingKeyboardHeight];
+		};
+	}
 	_screenKeyboard.hapticFeedback = settings_keyhaptics();
 	_screenKeyboard.keyPreview = settings_keypreview();
 	[self setScreenKeyboardShown:YES];
@@ -1648,11 +1698,16 @@ static NP2FileKind file_kind(NSString *name)
 		keyboardHeight = viewH - hinge - kOverlayBarHeight;
 	}
 	else if (_screenKeyboardShown) {
+		/* Every keyboard is as tall as the PC-98 keyboard would be (about
+		 * half the height at most), times the height chosen; its rows fill it. */
 		CGFloat maxHeight = viewH * ((viewH > viewW) ? 0.45 : 0.5) - safe.bottom;
-		keyboardHeight = [_screenKeyboard heightForWidth:viewW - safe.left - safe.right maxHeight:maxHeight] + safe.bottom;
+		_standardKeyboardHeight = [standard_keyboard() heightForWidth:viewW - safe.left - safe.right maxHeight:maxHeight];
+		CGFloat percent = _dragPercent ?: (CGFloat)[[NSUserDefaults standardUserDefaults] integerForKey:kSettingKeyboardHeight];
+		CGFloat height = round(_standardKeyboardHeight * MIN(MAX(percent, KEYBOARD_HEIGHT_MIN), KEYBOARD_HEIGHT_MAX) / 100);
+		keyboardHeight = MIN(MAX(height, 100), viewH * 0.7 - safe.bottom) + safe.bottom;
 	}
 	if (_screenKeyboardShown) {
-		_screenKeyboard.fillsHeight = folded;
+		_screenKeyboard.fillsHeight = YES;
 		_screenKeyboard.frame = CGRectMake(0, viewH - keyboardHeight, viewW, keyboardHeight);
 	}
 
@@ -1909,6 +1964,12 @@ static NP2FileKind file_kind(NSString *name)
 		NSURL *url = [str containsString:@"://"] ? [NSURL URLWithString:str]
 			: [NSURL fileURLWithPath:[[NSFileManager defaultManager].currentDirectoryPath stringByAppendingPathComponent:str]];
 		openurl_open(url);
+	}
+	else if ([command hasPrefix:@"!kbdresize:"]) {
+		/* "!kbdresize:-80" drags the keyboard's handle 80 points up and lets go */
+		CGFloat dy = [command substringFromIndex:11].doubleValue;
+		[self resizeKeyboardBy:dy / 2 ended:NO];
+		[self resizeKeyboardBy:dy ended:YES];
 	}
 	else if ([command hasPrefix:@"!kbdswitch:"]) {
 		/* as if the switcher above the keyboard (or iOS's) was tapped */

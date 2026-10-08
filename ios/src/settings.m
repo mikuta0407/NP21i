@@ -49,6 +49,7 @@ NSString *const kSettingShowSpeed = @"show_speed_warning";
 NSString *const kSettingScreenKeyboard = @"screen_keyboard";
 NSString *const kScreenKeyboardSystem = @"system";
 NSString *const kSettingScreenKeyboardShown = @"screen_keyboard_shown";
+NSString *const kSettingKeyboardHeight = @"keyboard_height";
 NSString *const kSettingKeyHaptics = @"key_haptics";
 NSString *const kSettingKeyPreview = @"key_preview";
 NSString *const kSettingLandscapeFold = @"fold_landscape";
@@ -208,7 +209,7 @@ NSString *settings_screenkeyboardtitle(NSString *identifier)
 
 NSString *settings_screenkeyboardshorttitle(NSString *identifier)
 {
-	NSDictionary<NSString *, NSString *> *titles = @{ @"pc98": @"PC-98", @"rcp": @"レコンポーザ", @"game": @"ゲーム", kScreenKeyboardSystem: @"iOS" };
+	NSDictionary<NSString *, NSString *> *titles = @{ @"pc98": @"PC-98", @"rcp": @"RCP", @"game": @"ゲーム", kScreenKeyboardSystem: @"iOS" };
 	return titles[identifier] ?: settings_screenkeyboardtitle(identifier);
 }
 
@@ -237,7 +238,7 @@ void settings_initialize(void)
 	 * opens the Settings app, so register them here as well. */
 	[[NSUserDefaults standardUserDefaults] registerDefaults:@{ kSettingMidiOutputLatency: @20, kSettingMidiInputLatency: @20, kSettingKeyboardLayout: @(KEYLAYOUT_JIS),
 		kSettingRunInBackground: @YES, kSettingResume: @YES, kSettingShowSpeed: @YES,
-		kSettingScreenKeyboard: @"pc98", kSettingScreenKeyboardShown: @YES, kSettingTrackpadSpeed: @100,
+		kSettingScreenKeyboard: @"pc98", kSettingScreenKeyboardShown: @YES, kSettingKeyboardHeight: @100, kSettingTrackpadSpeed: @100,
 		kSettingKeyHaptics: @YES, kSettingKeyPreview: @YES, kSettingMouseLock: @YES, kSettingPinchZoom: @YES,
 		kSettingVolumeMaster: @100 }];
 	apply_settings();

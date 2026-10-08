@@ -20,6 +20,7 @@ static const CGFloat kPadding = 4;
 static const CGFloat kKeyGap = 4;
 static const CGFloat kBlockGapUnits = 0.5;
 static const CGFloat kTabsHeight = 30;
+static const CGFloat kHandleHeight = 14;	/* the resize handle's strip */
 static const CGFloat kMinUnitWidth = 30;	/* blocks side by side only when the keys are this wide */
 static const CGFloat kMinRowHeight = 22;
 static const CGFloat kMaxRowHeight = 54;
@@ -209,6 +210,7 @@ typedef NS_ENUM(NSInteger, CapState) {
 	NSMutableArray<NP2KeyCap *> *_hitCaps;
 	UISegmentedControl *_tabs;
 	UISegmentedControl *_switcher;
+	UIView *_handle;
 	NSInteger _page;
 	NSMapTable<UITouch *, NP2KeyCap *> *_touches;
 	int _keyCount[0x80];		/* fingers holding each key code */
@@ -242,6 +244,20 @@ typedef NS_ENUM(NSInteger, CapState) {
 		[_switcher addTarget:self action:@selector(switcherChanged) forControlEvents:UIControlEventValueChanged];
 		_switcher.hidden = YES;
 		[self addSubview:_switcher];
+		_handle = [[UIView alloc] init];
+		_handle.hidden = YES;
+		_handle.accessibilityLabel = @"キーボードの高さ";
+		_handle.accessibilityHint = @"ドラッグで高さを変え、ダブルタップで標準に戻します";
+		UIView *pill = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 40, 5)];
+		pill.backgroundColor = [UIColor colorWithWhite:0.45 alpha:1];
+		pill.layer.cornerRadius = 2.5;
+		pill.tag = 1;
+		[_handle addSubview:pill];
+		[_handle addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanned:)]];
+		UITapGestureRecognizer *doubleTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleDoubleTapped)];
+		doubleTap.numberOfTapsRequired = 2;
+		[_handle addGestureRecognizer:doubleTap];
+		[self addSubview:_handle];
 		self.layout = layout;
 	}
 	return self;
@@ -271,6 +287,33 @@ typedef NS_ENUM(NSInteger, CapState) {
 	_switcher.selectedSegmentIndex = _switchIndex;	/* until the owner switches */
 	if (index != _switchIndex && self.onSwitch) {
 		self.onSwitch(index);
+	}
+}
+
+- (void)setShowsResizeHandle:(BOOL)shows
+{
+	if (shows != _showsResizeHandle) {
+		_showsResizeHandle = shows;
+		_handle.hidden = !shows;
+		[self setNeedsLayout];
+	}
+}
+
+- (void)handlePanned:(UIPanGestureRecognizer *)pan
+{
+	if (pan.state == UIGestureRecognizerStateBegan) {
+		[self releaseAll];
+	}
+	BOOL ended = (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled);
+	if (self.onResize && pan.state != UIGestureRecognizerStatePossible) {
+		self.onResize([pan translationInView:self.superview].y, ended);
+	}
+}
+
+- (void)handleDoubleTapped
+{
+	if (self.onResetSize) {
+		self.onResetSize();
 	}
 }
 
@@ -402,7 +445,8 @@ typedef NS_ENUM(NSInteger, CapState) {
 	for (NP2KeyBlock *block in blocks) {
 		rowCount = MAX(rowCount, block.rows.count);
 	}
-	return kPadding * 2 + kKeyGap * (CGFloat)(rowCount - 1) + ([self hasTopRowForWidth:width] ? kTabsHeight + kKeyGap : 0);
+	return kPadding * 2 + kKeyGap * (CGFloat)(rowCount - 1) + ([self hasTopRowForWidth:width] ? kTabsHeight + kKeyGap : 0) +
+		(_showsResizeHandle ? kHandleHeight : 0);
 }
 
 - (CGFloat)heightOfBlocks:(NSArray<NP2KeyBlock *> *)blocks width:(CGFloat)width maxHeight:(CGFloat)maxHeight
@@ -446,6 +490,12 @@ typedef NS_ENUM(NSInteger, CapState) {
 	CGFloat unit = (width - kPadding * 2) / [self unitsForBlocks:blocks];
 
 	CGFloat top = area.origin.y + kPadding;
+	if (_showsResizeHandle) {
+		_handle.frame = CGRectMake(area.origin.x, area.origin.y, width, kHandleHeight + kPadding);
+		UIView *pill = [_handle viewWithTag:1];
+		pill.center = CGPointMake(width / 2, (kHandleHeight + kPadding) / 2);
+		top += kHandleHeight;
+	}
 	BOOL switcher = _switchTitles.count > 0;
 	_tabs.hidden = !paged;
 	_switcher.hidden = !switcher;
