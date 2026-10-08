@@ -1409,13 +1409,34 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	}
 	else if ([command hasPrefix:@"!profile:"]) {
 		/* "!profile:new:<name>:<copy|share|none>", "!profile:switch:<name>",
-		 * "!profile:delete:<name>", "!profile:list" */
+		 * "!profile:delete:<name>", "!profile:export:<name>" (to exports/),
+		 * "!profile:import:<folder in the data directory>", "!profile:list" */
 		NSArray<NSString *> *args = [[command substringFromIndex:9] componentsSeparatedByString:@":"];
 		if ([args[0] isEqualToString:@"new"] && args.count > 2) {
 			NSArray<NSString *> *kinds = @[ @"copy", @"share", @"none" ];
 			NSError *error = nil;
 			NSString *identifier = profile_create(args[1], (NP2ProfileDisks)[kinds indexOfObject:args[2]], &error);
 			NSLog(@"keybar: profile %@ %@", identifier, error.localizedDescription ?: @"");
+		}
+		else if ([args[0] isEqualToString:@"export"] && args.count > 1) {
+			/* into exports/ in the data directory */
+			for (NSString *identifier in profile_ids()) {
+				if ([profile_name(identifier) isEqualToString:args[1]]) {
+					NSError *error = nil;
+					NSURL *package = profile_export(identifier, &error);
+					[[NSFileManager defaultManager] createDirectoryAtPath:@"exports" withIntermediateDirectories:YES attributes:nil error:nil];
+					NSString *to = [@"exports" stringByAppendingPathComponent:package.lastPathComponent];
+					[[NSFileManager defaultManager] removeItemAtPath:to error:nil];
+					[[NSFileManager defaultManager] moveItemAtPath:package.path toPath:to error:&error];
+					NSLog(@"keybar: exported to %@ %@", to, error.localizedDescription ?: @"");
+				}
+			}
+		}
+		else if ([args[0] isEqualToString:@"import"] && args.count > 1) {
+			NSError *error = nil;
+			NSString *path = [[NSFileManager defaultManager].currentDirectoryPath stringByAppendingPathComponent:args[1]];
+			NSString *identifier = profile_import([NSURL fileURLWithPath:path], &error);
+			NSLog(@"keybar: imported %@ %@", identifier, error.localizedDescription ?: @"");
 		}
 		else if (([args[0] isEqualToString:@"switch"] || [args[0] isEqualToString:@"delete"]) && args.count > 1) {
 			for (NSString *identifier in profile_ids()) {

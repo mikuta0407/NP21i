@@ -18,6 +18,8 @@
 #include "profile.h"
 
 #import <CoreAudioKit/CoreAudioKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <objc/runtime.h>
 #include <pccore.h>
 #include <np2.h>
 #include <dosio.h>
@@ -46,6 +48,8 @@ typedef NS_ENUM(NSInteger, RowKind) {
 @property (nonatomic, copy) BOOL (^isOn)(void);
 @property (nonatomic, copy) void (^setOn)(BOOL on);
 @property (nonatomic, copy) void (^action)(UIViewController *controller);
+/* Shown by swiping the row to the left. */
+@property (nonatomic, copy) NSArray<UIContextualAction *> *(^swipeActions)(UIViewController *controller);
 @end
 
 @implementation NP2Row
@@ -194,6 +198,18 @@ static NP2Section *section(NSString *header, NSString *footer, NSArray<NP2Row *>
 		break;
 	}
 	return cell;
+}
+
+- (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+	NP2Row *row = [self rowAt:indexPath];
+	NSArray<UIContextualAction *> *actions = row.swipeActions ? row.swipeActions(self) : nil;
+	if (actions.count == 0) {
+		return nil;
+	}
+	UISwipeActionsConfiguration *config = [UISwipeActionsConfiguration configurationWithActions:actions];
+	config.performsFirstActionWithFullSwipe = NO;
+	return config;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
@@ -506,40 +522,86 @@ static void create_profile(UIViewController *host)
 		});
 }
 
-static void profile_actions(UIViewController *host, NSString *identifier)
+/* Calls back with the URLs picked (nil if cancelled); kept alive by the
+ * picker it delegates for. */
+@interface NP2PickerDelegate : NSObject <UIDocumentPickerDelegate>
+@property (nonatomic, copy) void (^done)(NSArray<NSURL *> *urls);
+@end
+
+@implementation NP2PickerDelegate
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
 {
-	BOOL active = [identifier isEqualToString:profile_active()];
-	UIAlertController *sheet = [UIAlertController alertControllerWithTitle:profile_name(identifier)
-	                                                               message:[profile_disks(identifier) componentsJoinedByString:@"\n"]
-	                                                        preferredStyle:UIAlertControllerStyleAlert];
-	if (!active) {
-		[sheet addAction:[UIAlertAction actionWithTitle:@"この環境に切り替える" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-			(void)action;
-			settingsview_switchprofile(host, identifier);
-		}]];
+	self.done(urls);
+}
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller
+{
+	self.done(nil);
+}
+@end
+
+static void present_picker(UIViewController *host, UIDocumentPickerViewController *picker, void (^done)(NSArray<NSURL *> *urls))
+{
+	NP2PickerDelegate *delegate = [NP2PickerDelegate new];
+	delegate.done = done;
+	picker.delegate = delegate;
+	objc_setAssociatedObject(picker, @selector(delegate), delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	[host presentViewController:picker animated:YES completion:nil];
+}
+
+static void export_profile(UIViewController *host, NSString *identifier)
+{
+	NSError *error = nil;
+	NSURL *package = profile_export(identifier, &error);
+	if (package == nil) {
+		show_error(host, @"書き出せませんでした", error);
+		return;
 	}
-	[sheet addAction:[UIAlertAction actionWithTitle:@"名前を変える" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-		(void)action;
-		ask_name(host, @"名前を変える", nil, profile_name(identifier), @[ @"変更" ], ^(NSString *name, NSInteger button) {
-			profile_rename(identifier, name);
-		});
+	UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[ package ] asCopy:YES];
+	present_picker(host, picker, ^(NSArray<NSURL *> *urls) {
+		[[NSFileManager defaultManager] removeItemAtURL:package error:nil];
+	});
+}
+
+static void import_profile(UIViewController *host)
+{
+	UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[ UTTypeFolder ]];
+	present_picker(host, picker, ^(NSArray<NSURL *> *urls) {
+		NSURL *url = urls.firstObject;
+		if (url == nil) {
+			return;
+		}
+		BOOL scoped = [url startAccessingSecurityScopedResource];
+		NSError *error = nil;
+		NSString *identifier = profile_import(url, &error);
+		if (scoped) {
+			[url stopAccessingSecurityScopedResource];
+		}
+		if (identifier == nil) {
+			show_error(host, @"読み込めませんでした", error);
+			return;
+		}
+		settingsview_switchprofile(host, identifier);
+	});
+}
+
+static void rename_profile(UIViewController *host, NSString *identifier)
+{
+	ask_name(host, @"名前を変える", nil, profile_name(identifier), @[ @"変更" ], ^(NSString *name, NSInteger button) {
+		profile_rename(identifier, name);
+	});
+}
+
+static void delete_profile(UIViewController *host, NSString *identifier)
+{
+	UIAlertController *confirm = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"「%@」を削除しますか？", profile_name(identifier)]
+	                                                                 message:@"設定と保存された状態を削除します。ハードディスクのイメージは hdd/ に残ります（ディスクの画面で削除できます）。"
+	                                                          preferredStyle:UIAlertControllerStyleAlert];
+	[confirm addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:nil]];
+	[confirm addAction:[UIAlertAction actionWithTitle:@"削除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
+		(void)a;
+		profile_delete(identifier);
 	}]];
-	if (!active) {
-		[sheet addAction:[UIAlertAction actionWithTitle:@"削除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-			(void)action;
-			UIAlertController *confirm = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"「%@」を削除しますか？", profile_name(identifier)]
-			                                                                 message:@"設定と保存された状態を削除します。ハードディスクのイメージは hdd/ に残ります（ディスクの画面で削除できます）。"
-			                                                          preferredStyle:UIAlertControllerStyleAlert];
-			[confirm addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:nil]];
-			[confirm addAction:[UIAlertAction actionWithTitle:@"削除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
-				(void)a;
-				profile_delete(identifier);
-			}]];
-			[host presentViewController:confirm animated:YES completion:nil];
-		}]];
-	}
-	[sheet addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:nil]];
-	[host presentViewController:sheet animated:YES completion:nil];
+	[host presentViewController:confirm animated:YES completion:nil];
 }
 
 static UIViewController *profiles_screen(void)
@@ -555,15 +617,45 @@ static UIViewController *profiles_screen(void)
 				: [NSString stringWithFormat:@"%@\n（ハードディスクなし）", profile_name(identifier)];
 			row.isOn = ^BOOL { return [identifier isEqualToString:profile_active()]; };
 			row.action = ^(UIViewController *controller) {
-				profile_actions(controller, identifier);
+				settingsview_switchprofile(controller, identifier);
+			};
+			row.swipeActions = ^NSArray<UIContextualAction *> *(UIViewController *controller) {
+				NSMutableArray<UIContextualAction *> *actions = [NSMutableArray array];
+				if (![identifier isEqualToString:profile_active()]) {
+					[actions addObject:[UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"削除"
+					                                                         handler:^(UIContextualAction *a, UIView *v, void (^done)(BOOL)) {
+						delete_profile(controller, identifier);
+						done(YES);
+					}]];
+				}
+				UIContextualAction *rename = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:@"名前を変える"
+				                                                                   handler:^(UIContextualAction *a, UIView *v, void (^done)(BOOL)) {
+					rename_profile(controller, identifier);
+					done(YES);
+				}];
+				rename.backgroundColor = UIColor.systemBlueColor;
+				[actions addObject:rename];
+				UIContextualAction *export = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:@"書き出す"
+				                                                                   handler:^(UIContextualAction *a, UIView *v, void (^done)(BOOL)) {
+					export_profile(controller, identifier);
+					done(YES);
+				}];
+				export.backgroundColor = UIColor.systemGreenColor;
+				[actions addObject:export];
+				return actions;
 			};
 			[rows addObject:row];
 		}
 		return @[
-			section(nil, @"環境ごとに、PC-98 の設定（ハードディスク、メモリ、サウンドボード、MIDI など）、フロッピー、「前回の状態から再開」の状態を持ちます。切り替えると今の環境を保存して、選んだ環境で PC-98 を起動し直します。", rows),
-			section(nil, nil, @[ button_row(@"新しい環境を作る…", ^(UIViewController *controller) {
-				create_profile(controller);
-			}) ]),
+			section(nil, @"環境ごとに、PC-98 の設定（ハードディスク、メモリ、サウンドボード、MIDI など）、フロッピー、「前回の状態から再開」の状態を持ちます。タップで切り替えると、今の環境を保存して、選んだ環境で PC-98 を起動し直します。左にスワイプすると名前の変更、書き出し、削除ができます。", rows),
+			section(nil, @"書き出すと、設定・状態・フロッピーとディスクイメージを「名前.np21env」フォルダにまとめて、ファイル App の好きな場所（iCloud Drive など）に保存します。そのフォルダを「環境を読み込む」で選ぶと、別の端末でも同じ環境を使えます。", @[
+				button_row(@"新しい環境を作る…", ^(UIViewController *controller) {
+					create_profile(controller);
+				}),
+				button_row(@"環境を読み込む…", ^(UIViewController *controller) {
+					import_profile(controller);
+				}),
+			]),
 		];
 	}];
 }

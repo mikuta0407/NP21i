@@ -222,6 +222,177 @@ void profile_switch(NSString *identifier)
 	notify();
 }
 
+// ---- export and import
+
+static NSString *map_hdds(NSString *config, NSString *(^map)(NSString *value));
+
+static NSError *failure(NSString *message)
+{
+	return [NSError errorWithDomain:@"NP21Profile" code:1 userInfo:@{ NSLocalizedDescriptionKey: message }];
+}
+
+/* dir/name, or dir/name 2.ext ... if that exists. */
+static NSString *unique_in(NSString *dir, NSString *name)
+{
+	NSString *base = name.stringByDeletingPathExtension;
+	NSString *ext = name.pathExtension;
+	for (int n = 1; ; n++) {
+		NSString *file = (n == 1) ? base : [NSString stringWithFormat:@"%@ %d", base, n];
+		NSString *path = [dir stringByAppendingPathComponent:ext.length ? [file stringByAppendingPathExtension:ext] : file];
+		if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+			return path;
+		}
+	}
+}
+
+NSURL *profile_export(NSString *identifier, NSError **error)
+{
+	NSFileManager *fm = [NSFileManager defaultManager];
+	BOOL active = [identifier isEqualToString:profile_active()];
+	if (active) {
+		save_active();		/* its files now, and a copy in its directory */
+	}
+	NSString *dir = dir_of(identifier);
+	NSString *config = [NSString stringWithContentsOfFile:[dir stringByAppendingPathComponent:kConfig] encoding:NSUTF8StringEncoding error:error];
+	if (config == nil) {
+		return nil;
+	}
+	NSString *name = profile_name(identifier);
+	NSString *safe = [[name componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"/:\\"]] componentsJoinedByString:@"_"];
+	NSString *package = [NSTemporaryDirectory() stringByAppendingPathComponent:[safe stringByAppendingPathExtension:@"np21env"]];
+	[fm removeItemAtPath:package error:nil];
+	for (NSString *sub in @[ @"hdd", @"fdd" ]) {
+		if (![fm createDirectoryAtPath:[package stringByAppendingPathComponent:sub] withIntermediateDirectories:YES attributes:nil error:error]) {
+			return nil;
+		}
+	}
+	__block NSError *copyError = nil;
+	NSMutableDictionary<NSString *, NSString *> *copied = [NSMutableDictionary dictionary];
+	NSString *(^take)(NSString *, NSString *) = ^NSString *(NSString *value, NSString *sub) {
+		if (value.length == 0 || ![fm fileExistsAtPath:value] || copyError) {
+			return nil;
+		}
+		if (copied[value] == nil) {
+			NSString *to = unique_in([package stringByAppendingPathComponent:sub], value.lastPathComponent);
+			NSError *e = nil;
+			if (![fm copyItemAtPath:value toPath:to error:&e]) {
+				copyError = e;
+				return nil;
+			}
+			copied[value] = [sub stringByAppendingPathComponent:to.lastPathComponent];
+		}
+		return copied[value];
+	};
+	config = map_hdds(config, ^NSString *(NSString *value) { return take(value, @"hdd"); });
+	NSMutableArray<NSString *> *fdd = [NSMutableArray array];
+	for (NSString *path in info_of(identifier)[@"fdd"] ?: @[]) {
+		[fdd addObject:take(path, @"fdd") ?: @""];
+	}
+	if (copyError) {
+		[fm removeItemAtPath:package error:nil];
+		if (error) {
+			*error = copyError;
+		}
+		return nil;
+	}
+	[config writeToFile:[package stringByAppendingPathComponent:kConfig] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+	NSString *state = [dir stringByAppendingPathComponent:kState];
+	if ([fm fileExistsAtPath:state]) {
+		[fm copyItemAtPath:state toPath:[package stringByAppendingPathComponent:kState] error:nil];
+	}
+	NSMutableDictionary *info = [info_of(identifier) mutableCopy];
+	info[@"fdd"] = fdd;
+	/* where each image was: the saved state opens the disks by those paths */
+	NSMutableDictionary<NSString *, NSString *> *images = [NSMutableDictionary dictionary];
+	for (NSString *original in copied) {
+		images[copied[original]] = original;
+	}
+	info[@"images"] = images;
+	[info writeToFile:[package stringByAppendingPathComponent:kInfo] atomically:YES];
+	NSLog(@"profile: exported %@ (%lu images)", name, (unsigned long)copied.count);
+	return [NSURL fileURLWithPath:package];
+}
+
+NSString *profile_import(NSURL *folder, NSError **error)
+{
+	NSFileManager *fm = [NSFileManager defaultManager];
+	NSString *package = folder.path;
+	NSString *config = [NSString stringWithContentsOfFile:[package stringByAppendingPathComponent:kConfig] encoding:NSUTF8StringEncoding error:nil];
+	if (config == nil) {
+		if (error) {
+			*error = failure(@"環境のフォルダ（.np21env）ではありません。np21kai.cfg がありません。");
+		}
+		return nil;
+	}
+	NSMutableDictionary *info = [[NSDictionary dictionaryWithContentsOfFile:[package stringByAppendingPathComponent:kInfo]] mutableCopy]
+		?: [NSMutableDictionary dictionary];
+	__block NSError *copyError = nil;
+	__block BOOL samePaths = (info[@"images"] != nil);
+	NSDictionary<NSString *, NSString *> *originals = info[@"images"];
+	NSMutableArray<NSString *> *added = [NSMutableArray array];
+	NSString *(^bring)(NSString *) = ^NSString *(NSString *value) {
+		NSString *from = [package stringByAppendingPathComponent:value];
+		if (value.length == 0 || [value hasPrefix:@"/"] || ![fm fileExistsAtPath:from] || copyError) {
+			return nil;
+		}
+		NSString *sub = value.pathComponents.firstObject;
+		[fm createDirectoryAtPath:sub withIntermediateDirectories:YES attributes:nil error:nil];
+		NSString *to = unique_in(sub, value.lastPathComponent);
+		NSError *e = nil;
+		if (![fm copyItemAtPath:from toPath:to error:&e]) {
+			copyError = e;
+			return nil;
+		}
+		[added addObject:to];
+		if (![originals[value] isEqualToString:to]) {
+			samePaths = NO;
+		}
+		return to;
+	};
+	config = map_hdds(config, ^NSString *(NSString *value) { return bring(value); });
+	NSMutableArray<NSString *> *fdd = [NSMutableArray array];
+	for (NSString *path in info[@"fdd"] ?: @[]) {
+		[fdd addObject:bring(path) ?: @""];
+	}
+	NSString *identifier = [NSUUID UUID].UUIDString;
+	if (copyError || ![fm createDirectoryAtPath:dir_of(identifier) withIntermediateDirectories:YES attributes:nil error:error]) {
+		for (NSString *path in added) {
+			[fm removeItemAtPath:path error:nil];
+		}
+		if (error && copyError) {
+			*error = copyError;
+		}
+		return nil;
+	}
+	[config writeToFile:[dir_of(identifier) stringByAppendingPathComponent:kConfig] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+	/* The saved state opens the disks where they were: only with the same
+	 * paths here, or it would open another environment's disk. */
+	NSString *state = [package stringByAppendingPathComponent:kState];
+	if (samePaths && [fm fileExistsAtPath:state]) {
+		[fm copyItemAtPath:state toPath:[dir_of(identifier) stringByAppendingPathComponent:kState] error:nil];
+	}
+	else if ([fm fileExistsAtPath:state]) {
+		NSLog(@"profile: import without its saved state (the disks are elsewhere)");
+	}
+	[info removeObjectForKey:@"images"];
+	NSString *name = info[@"name"] ?: folder.lastPathComponent.stringByDeletingPathExtension;
+	NSMutableSet<NSString *> *names = [NSMutableSet set];
+	for (NSString *other in profile_ids()) {
+		[names addObject:profile_name(other)];
+	}
+	NSString *unique = name;
+	for (int n = 2; [names containsObject:unique]; n++) {
+		unique = [NSString stringWithFormat:@"%@ %d", name, n];
+	}
+	info[@"name"] = unique;
+	info[@"created"] = [NSDate date];
+	info[@"fdd"] = fdd;
+	write_info(identifier, info);
+	NSLog(@"profile: imported %@ (%lu images)", unique, (unsigned long)added.count);
+	notify();
+	return identifier;
+}
+
 // ---- making and removing
 
 /* The config with each hard disk entry's value changed by map (nil: kept). */

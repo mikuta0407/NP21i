@@ -43,6 +43,14 @@ void profile_switch(NSString *identifier);
  * without its floppies or saved state; returns its identifier, or nil. */
 NSString *profile_create(NSString *name, NP2ProfileDisks disks, NSError **error);
 
+/* An environment as a folder <name>.np21env to keep or take to another
+ * device: its settings, saved state and floppies, and copies of its disk
+ * images (hdd/, fdd/). Made in a temporary directory. */
+NSURL *profile_export(NSString *identifier, NSError **error);
+/* Such a folder as a new environment (not switched to); its images are
+ * copied into hdd/ and fdd/. Returns its identifier, or nil. */
+NSString *profile_import(NSURL *folder, NSError **error);
+
 void profile_rename(NSString *identifier, NSString *name);
 /* Not the one in use. Its hard disk images are left in hdd/. */
 void profile_delete(NSString *identifier);
