@@ -12,6 +12,8 @@ void settingsview_present(UIViewController *host);
 
 /* Shows the settings screen at its environments. */
 void settingsview_presentprofiles(UIViewController *host);
+/* Shows how to use the app (gestures, menus, files). */
+void settingsview_presenthelp(UIViewController *host);
 /* Switches to an environment, asking first when the state would be lost. */
 void settingsview_switchprofile(UIViewController *host, NSString *identifier);
 

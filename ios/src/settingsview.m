@@ -517,6 +517,70 @@ static UIViewController *gamepad_screen(void)
 	}];
 }
 
+// ---- help
+
+/* What there is to know, a section a topic, a row a thing. */
+static UIViewController *help_screen(void)
+{
+	NP2Section *(^topic)(NSString *, NSArray<NSString *> *) = ^NP2Section *(NSString *title, NSArray<NSString *> *lines) {
+		NSMutableArray<NP2Row *> *rows = [NSMutableArray array];
+		for (NSString *line in lines) {
+			NP2Row *row = detail_row(line, nil, nil);
+			[rows addObject:row];
+		}
+		return section(title, nil, rows);
+	};
+	return [[NP2TableViewController alloc] initWithTitle:@"使い方" build:^NSArray<NP2Section *> *{
+		return @[
+			topic(@"画面のタッチ", @[
+				@"ふだんは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。",
+				@"≡ →「画面をタッチパッドにする」をオンにすると、指でなぞってマウスを動かします。タップで左クリック、2 本指のタップで右クリックです。",
+				@"タッチパッドでは、少し押さえてから動かすか、タップしてすぐ触れ直して動かすとドラッグです。",
+				@"2 本指でピンチすると画面を拡大できます。拡大中は 2 本指でなぞると見る場所が動きます。縮めきるか、≡ →「拡大を戻す」で元に戻ります。",
+				@"NP2 メニュー（≡ →「NP2 メニュー」）が出ている間は、触れた所がそのまま選ばれます。",
+			]),
+			topic(@"キーバー", @[
+				@"≡ はメニュー、キーボードのボタンは画面のキーボード（長押しで種類を選ぶ）、十字のボタンは十字キーの表示、∨ はバーを隠します。",
+				@"SHIFT・CTRL・GRPH はタップすると次のキーにだけ効き、押さえたままにすると押している間だけ効きます。",
+			]),
+			topic(@"画面のキーボード", @[
+				@"PC-98 キーボードは「メイン」と「編集・テンキー」に分かれています（幅が足りないときはタブで切り替え）。",
+				@"ゲーム用キーボードは、十字キーと Z / X / スペース / リターンなどを大きくしたものです。",
+				@"長押しで連続入力、押したときの振動、押した文字の大きな表示は 設定 →「キーボード」で変えられます。",
+			]),
+			topic(@"環境", @[
+				@"レコンポーザ用、ゲーム用など、ハードディスク・PC-98 の設定・状態・フロッピー・キーボードとコントローラの設定を環境ごとに持てます。",
+				@"≡ →「環境」で切り替えます。設定 →「環境」では、タップで切り替え、左にスワイプで名前の変更・書き出し・削除ができます。",
+				@"書き出した「名前.np21env」フォルダは、別の端末の「環境を読み込む」で取り込めます。",
+			]),
+			topic(@"状態の保存と読み込み", @[
+				@"≡ →「状態の保存と読み込み」で、今の状態をスロット（6 個、環境ごと）に保存し、あとで戻れます。",
+				@"設定の「前回の状態から再開」がオンなら、アプリを閉じても次はそのまま続きから始まります。",
+			]),
+			topic(@"記録", @[
+				@"≡ →「記録」で、スクリーンショット、画面の録画（音声付き）、MIDI の記録ができます。",
+				@"記録中は左上に赤い表示が出ます。タップすると止められます。",
+				[NSString stringWithFormat:@"保存先は %@ の captures（画像・動画）と midi（.mid）です。", data_dir_hint(nil)],
+			]),
+			topic(@"ゲームコントローラとマウス", @[
+				@"ゲームコントローラの十字キーは矢印キー・テンキー・ジョイスティック端子から選べ、ボタンは 設定 →「ボタンの割り当て」で好きなキーにできます。",
+				@"iPad にマウスやトラックパッドをつなぐと、ポインタがアプリの中に固定され、動かした分だけ PC-98 のマウスが動きます。NP2 メニューや設定を開くと固定が外れます。",
+			]),
+			topic(@"MIDI", @[
+				@"設定 →「MIDI」で出力先と入力元を選びます。Bluetooth MIDI 機器もそこで接続できます。",
+				@"「MIDI クロックを送る」をオンにすると、外部の機材や DAW がソフトのテンポに合わせて動きます。",
+			]),
+			topic(@"iPhone Duo", @[
+				@"半分開くと PC-98 キーボードが出ます。縦向きでは上半分が画面、下半分がキーボードです。横向きでの配置は 設定 →「折りたたみ」で選べます。",
+			]),
+			topic(@"ファイル", @[
+				[NSString stringWithFormat:@"%@ に、ハードディスク（hdd）、フロッピー（fdd）、Z: ドライブ（hostdrv）、記録（captures、midi）、環境（profiles）があります。", data_dir_hint(nil)],
+				@"BIOS.ROM と FONT.ROM は実機から吸い出したものを、このフォルダに入れてください。",
+			]),
+		];
+	}];
+}
+
 // ---- environments
 
 void settingsview_switchprofile(UIViewController *host, NSString *identifier)
@@ -732,6 +796,11 @@ static void present_screen(UIViewController *host, UIViewController *root);
 void settingsview_presentprofiles(UIViewController *host)
 {
 	present_screen(host, profiles_screen());
+}
+
+void settingsview_presenthelp(UIViewController *host)
+{
+	present_screen(host, help_screen());
 }
 
 // ---- license
@@ -1014,6 +1083,9 @@ static NSArray<NP2Section *> *settings_sections(void)
 	[sections addObject:section(@"情報", @"BIOS や FONT の ROM、レコンポーザなどのソフトウェアはアプリに含まれていません。お持ちのものをデータフォルダに入れて使ってください。", @[
 		detail_row(@"はじめに", nil, ^(UIViewController *c) {
 			settingsview_presentguide(c);
+		}),
+		detail_row(@"使い方", nil, ^(UIViewController *c) {
+			[c.navigationController pushViewController:help_screen() animated:YES];
 		}),
 		detail_row(@"ライセンス", nil, ^(UIViewController *c) {
 			[c.navigationController pushViewController:[NP2TextViewController new] animated:YES];

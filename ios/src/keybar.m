@@ -1102,6 +1102,11 @@ static UIImage *slot_thumbnail(NSInteger slot)
 		(void)action;
 		settingsview_present([weakSelf hostController]);
 	}];
+	UIAction *help = [UIAction actionWithTitle:@"使い方…" image:[UIImage systemImageNamed:@"questionmark.circle"]
+	                               identifier:nil handler:^(UIAction *action) {
+		(void)action;
+		settingsview_presenthelp([weakSelf hostController]);
+	}];
 	UIAction *np2menu = [UIAction actionWithTitle:@"NP2 メニュー (F11)" image:[UIImage systemImageNamed:@"slider.horizontal.3"]
 	                                  identifier:nil handler:^(UIAction *action) {
 		(void)action;
@@ -1115,7 +1120,7 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	return [UIMenu menuWithChildren:@[
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ profiles, slots, fdd, hdd, files ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ capture, trackpad ]],
-		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, np2menu, reset ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, help, np2menu, reset ]],
 	]];
 }
 
@@ -1670,6 +1675,9 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	}
 	else if ([command hasPrefix:@"!style:"]) {
 		[[NSUserDefaults standardUserDefaults] setInteger:[command substringFromIndex:7].integerValue forKey:kSettingScreenStyle];
+	}
+	else if ([command isEqualToString:@"!help"]) {
+		settingsview_presenthelp([self hostController]);
 	}
 	else if ([command isEqualToString:@"!profiles"]) {
 		settingsview_presentprofiles([self hostController]);
