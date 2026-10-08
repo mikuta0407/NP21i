@@ -581,6 +581,13 @@ static UIViewController *help_screen(void)
 			topic(@"ファイル", @[
 				[NSString stringWithFormat:@"%@ に、ハードディスク（hdd）、フロッピー（fdd）、Z: ドライブ（hostdrv）、記録（captures、midi）、環境（profiles）があります。", data_dir_hint(nil)],
 				@"BIOS.ROM と FONT.ROM は実機から吸い出したものを、このフォルダに入れてください。",
+				@"ファイル App や共有シートでディスクイメージを NP21 で開くと、フロッピードライブに入れるか、ハードディスクとしてつなぐかを選べます。ほかのファイル（レコンポーザの曲など）は Z: ドライブにコピーできます。",
+			]),
+			topic(@"リンク（ショートカット App）", @[
+				@"np21:// で始まるリンクで操作できます。ショートカット App の「URL を開く」から使えます。",
+				@"np21://env/<環境の名前> で環境を切り替え、np21://slot/save/<1〜6> と np21://slot/load/<1〜6> で状態を保存・読み込みます。",
+				@"np21://fdd/<1 か 2>/<データフォルダの中のパス> でフロッピーを入れ（例: np21://fdd/1/fdd/game.d88）、np21://eject/<1 か 2> で取り出します。",
+				@"np21://type?text=<文字> で文字を入力し（改行は %0A）、np21://reset でリセット、np21://screenshot でスクリーンショットです。入力とリセットは確認してから行います。",
 			]),
 		];
 	}];

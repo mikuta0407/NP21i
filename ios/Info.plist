@@ -6,6 +6,92 @@
 	<string>ja</string>
 	<key>CFBundleDisplayName</key>
 	<string>NP21</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>net.mikuta0407.np21ios</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>np21</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>PC-98 Disk Image</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>net.mikuta0407.np21ios.floppy-image</string>
+				<string>net.mikuta0407.np21ios.harddisk-image</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>File for the Z: Drive</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>net.mikuta0407.np21ios.floppy-image</string>
+			<key>UTTypeDescription</key>
+			<string>PC-98 Floppy Disk Image</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>d88</string>
+					<string>88d</string>
+					<string>d98</string>
+					<string>98d</string>
+					<string>fdi</string>
+					<string>hdm</string>
+					<string>nfd</string>
+					<string>tfd</string>
+					<string>xdf</string>
+					<string>dup</string>
+					<string>2hd</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>net.mikuta0407.np21ios.harddisk-image</string>
+			<key>UTTypeDescription</key>
+			<string>PC-98 Hard Disk Image</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>hdi</string>
+					<string>nhd</string>
+					<string>thd</string>
+					<string>slh</string>
+					<string>hdn</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -38,7 +124,7 @@
 					<key>UISceneConfigurationName</key>
 					<string>Default</string>
 					<key>UISceneDelegateClassName</key>
-					<string>SDLUIKitSceneDelegate</string>
+					<string>NP2SceneDelegate</string>
 				</dict>
 			</array>
 		</dict>

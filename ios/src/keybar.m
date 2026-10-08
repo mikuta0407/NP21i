@@ -39,6 +39,7 @@
 #include "diskedit.h"
 #include "midiport.h"
 #include "clipboard.h"
+#include "openurl.h"
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -74,6 +75,7 @@ static NSString *const kDPadPortraitKey = @"dpad_portrait";		/* below the bar, d
 static NSString *const kDPadLandscapeKey = @"dpad_landscape";	/* over the screen, default off */
 static NSString *const kFddDir = @"fdd";
 static NSString *const kHddDir = @"hdd";
+static NSString *const kHostDir = @"hostdrv";	/* the Z: drive's folder, unless the config says another */
 
 typedef NS_ENUM(NSInteger, KeyKind) {
 	KeyKindKey,			/* down while touched */
@@ -236,6 +238,9 @@ static void setup_text_field(UIViewController *controller);
 - (UIViewController *)hostController;
 - (void)pickFileInto:(NSString *)dir handler:(void (^)(NSString *path))handler;
 - (void)setHdd:(REG8)drv path:(NSString *)path;
+- (void)confirmReset;
+- (void)confirmLoadSlot:(NSInteger)slot;
+- (void)openFile:(NSURL *)url;
 @end
 
 /* How the screen and the app's keyboard share a half open iPhone Duo. */
@@ -1335,6 +1340,133 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	});
 }
 
+// ---- files opened from other apps (openurl.m)
+
+typedef NS_ENUM(NSInteger, NP2FileKind) {
+	NP2FileKindOther,
+	NP2FileKindFloppy,
+	NP2FileKindHardDisk
+};
+
+/* The Z: drive's folder, relative to the data directory. */
+static NSString *host_dir(void)
+{
+	NSString *root = [NSString stringWithUTF8String:np2cfg.hdrvroot];
+	while ([root hasSuffix:@"/"]) {
+		root = [root substringToIndex:root.length - 1];
+	}
+	return (root.length && !root.isAbsolutePath) ? root : kHostDir;
+}
+
+static NP2FileKind file_kind(NSString *name)
+{
+	static NSSet<NSString *> *floppies, *hardDisks;
+	static dispatch_once_t once;
+	dispatch_once(&once, ^{
+		floppies = [NSSet setWithArray:@[ @"d88", @"88d", @"d98", @"98d", @"fdi", @"xdf", @"hdm", @"dup", @"2hd", @"tfd",
+		                                  @"nfd", @"hd4", @"hd5", @"hd9", @"fdd", @"h01", @"hdb", @"ddb", @"dd6", @"dcp",
+		                                  @"dcu", @"flp", @"img", @"bin" ]];
+		hardDisks = [NSSet setWithArray:@[ @"hdi", @"thd", @"nhd", @"hdd", @"vhd", @"slh", @"hdn", @"hds" ]];
+	});
+	NSString *ext = name.pathExtension.lowercaseString;
+	if ([floppies containsObject:ext]) {
+		return NP2FileKindFloppy;
+	}
+	if ([hardDisks containsObject:ext]) {
+		return NP2FileKindHardDisk;
+	}
+	return NP2FileKindOther;
+}
+
+/* A file given to the app (Files' "open", the share sheet): asks where it
+ * goes: a floppy drive, a hard disk slot or the Z: drive (hostdrv/), for
+ * which it is copied into the data directory unless it is already in it. */
+- (void)openFile:(NSURL *)url
+{
+	NSString *name = url.lastPathComponent;
+	NP2FileKind kind = file_kind(name);
+	__weak NP2KeyBar *weakSelf = self;
+
+	NSString *dataDir = [[NSFileManager defaultManager].currentDirectoryPath stringByResolvingSymlinksInPath];
+	NSString *path = [url.path stringByResolvingSymlinksInPath];
+	NSString *inPlace = [path hasPrefix:[dataDir stringByAppendingString:@"/"]] ? [path substringFromIndex:dataDir.length + 1] : nil;
+	/* copies the share sheet makes for the app: removed once copied in */
+	NSString *inbox = [[dataDir stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Inbox/"];
+	BOOL fromInbox = [path hasPrefix:inbox];
+
+	void (^use)(NSString *, void (^)(NSString *)) = ^(NSString *dir, void (^handler)(NSString *)) {
+		if (inPlace && ![dir isEqualToString:host_dir()]) {
+			handler(inPlace);
+			return;
+		}
+		[weakSelf importURL:url into:dir handler:^(NSString *copied) {
+			if (fromInbox) {
+				[[NSFileManager defaultManager] removeItemAtURL:url error:nil];
+			}
+			handler(copied);
+		}];
+	};
+
+	NSString *message = nil;
+	if (kind == NP2FileKindFloppy) {
+		message = @"フロッピーディスクのイメージとして入れるか、Z: ドライブにファイルとしてコピーします。";
+	}
+	else if (kind == NP2FileKindHardDisk) {
+		message = @"ハードディスクのイメージとしてつなぐ（リセット後に反映）か、Z: ドライブにファイルとしてコピーします。";
+	}
+	else {
+		message = @"Z: ドライブ（ホストドライブ）にコピーして、DOS から使えるようにします。";
+	}
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:name message:message preferredStyle:UIAlertControllerStyleAlert];
+	if (kind == NP2FileKindFloppy) {
+		for (REG8 drive = 0; drive < 2; drive++) {
+			NSString *current = fdd_name(drive);
+			NSString *title = current ? [NSString stringWithFormat:@"FDD%d に入れる（%@ と入れ替え）", drive + 1, current]
+			                          : [NSString stringWithFormat:@"FDD%d に入れる", drive + 1];
+			[alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+				(void)a;
+				use(kFddDir, ^(NSString *image) {
+					insert_fdd(drive, image);
+				});
+			}]];
+		}
+	}
+	else if (kind == NP2FileKindHardDisk) {
+		for (size_t i = 0; i < NELEMENTS(s_hddslots); i++) {
+			REG8 drv = s_hddslots[i].drv;
+			if (!hdd_slot_available(drv)) {
+				continue;
+			}
+			NSString *current = hdd_name(drv);
+			NSString *label = [NSString stringWithUTF8String:s_hddslots[i].label];
+			NSString *title = current ? [NSString stringWithFormat:@"%@ につなぐ（%@ と入れ替え）", label, current]
+			                          : [NSString stringWithFormat:@"%@ につなぐ", label];
+			[alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+				(void)a;
+				use(kHddDir, ^(NSString *image) {
+					[weakSelf setHdd:drv path:image];
+				});
+			}]];
+		}
+	}
+	[alert addAction:[UIAlertAction actionWithTitle:@"Z: ドライブにコピー" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+		(void)a;
+		use(host_dir(), ^(NSString *copied) {
+			BOOL enabled = np2cfg.hdrvenable != 0;
+			[weakSelf showMessage:@"Z: ドライブにコピーしました"
+			               detail:[NSString stringWithFormat:@"DOS からは Z:\\ に見えます（%@）。%@", copied.lastPathComponent,
+			                       enabled ? @"" : @"ホストドライブが使われていません。設定 →「ホストドライブ（Z:）」で使えるようにしてください。"]];
+		});
+	}]];
+	[alert addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:^(UIAlertAction *a) {
+		(void)a;
+		if (fromInbox) {
+			[[NSFileManager defaultManager] removeItemAtURL:url error:nil];
+		}
+	}]];
+	[[self hostController] presentViewController:alert animated:YES completion:nil];
+}
+
 // ---- show / hide
 
 - (void)hideBar
@@ -1678,6 +1810,13 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	if ([command isEqualToString:@"!midiports"]) {
 		midiport_debugdump();
 	}
+	else if ([command hasPrefix:@"!url:"]) {
+		/* "!url:np21://slot/save/1", "!url:fdd/game.d88" (a file in the data directory) */
+		NSString *str = [command substringFromIndex:5];
+		NSURL *url = [str containsString:@"://"] ? [NSURL URLWithString:str]
+			: [NSURL fileURLWithPath:[[NSFileManager defaultManager].currentDirectoryPath stringByAppendingPathComponent:str]];
+		openurl_open(url);
+	}
 	else if ([command isEqualToString:@"!copyscreen"]) {
 		clipboard_copyscreen();
 	}
@@ -1770,6 +1909,27 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	}
 	else if ([command isEqualToString:@"!guide"]) {
 		settingsview_presentguide([self hostController]);
+	}
+	else if ([command hasPrefix:@"!alert:"]) {
+		/* presses the button of the shown alert whose title starts with the text */
+		NSString *title = [command substringFromIndex:7];
+		UIViewController *top = [self hostController];
+		if ([top isKindOfClass:[UIAlertController class]]) {
+			for (UIAlertAction *action in ((UIAlertController *)top).actions) {
+				if ([action.title hasPrefix:title]) {
+					void (^handler)(UIAlertAction *) = [action valueForKey:@"handler"];	/* private; testing only */
+					[top dismissViewControllerAnimated:NO completion:^{
+						if (handler) {
+							handler(action);
+						}
+					}];
+					break;
+				}
+			}
+		}
+		else {
+			NSLog(@"keybar: no alert (%@)", top);
+		}
 	}
 	else if ([command isEqualToString:@"!dismiss"]) {
 		[[self hostController] dismissViewControllerAnimated:NO completion:nil];
@@ -2030,6 +2190,8 @@ void keybar_initialize(void)
 		lifecycle_start();
 		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 			settingsview_presentguideifneeded([s_keybar hostController]);
+			/* files and links given at launch, over the guide if it is shown */
+			openurl_ready();
 		});
 	}];
 }
@@ -2050,6 +2212,41 @@ void keybar_pickhdd(unsigned char drv)
 void keybar_sethdd(unsigned char drv, const char *path)
 {
 	[s_keybar setHdd:drv path:path ? [NSString stringWithUTF8String:path] : nil];
+}
+
+void keybar_openfile(NSURL *url)
+{
+	[s_keybar openFile:url];
+}
+
+UIViewController *keybar_hostcontroller(void)
+{
+	return [s_keybar hostController];
+}
+
+BOOL keybar_isready(void)
+{
+	return s_keybar != nil;
+}
+
+void keybar_insertfdd(unsigned char drive, NSString *path)
+{
+	insert_fdd(drive, path);
+}
+
+void keybar_confirmreset(void)
+{
+	[s_keybar confirmReset];
+}
+
+void keybar_confirmloadslot(NSInteger slot)
+{
+	[s_keybar confirmLoadSlot:slot];
+}
+
+void keybar_showmessage(NSString *title, NSString *detail)
+{
+	[s_keybar showMessage:title detail:detail];
 }
 
 void keybar_resetmachine(void)

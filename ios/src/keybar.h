@@ -46,3 +46,20 @@ void keybar_debugcommand(const char *command);
 #ifdef __cplusplus
 }
 #endif
+
+#ifdef __OBJC__
+#import <UIKit/UIKit.h>
+
+/* Whether the bar is there (the commands below do nothing before). */
+BOOL keybar_isready(void);
+/* A file given to the app: asks where it goes (a drive, Z:), copies it in. */
+void keybar_openfile(NSURL *url);
+/* The topmost presented controller, to present on. */
+UIViewController *keybar_hostcontroller(void);
+/* Path relative to the data directory. */
+void keybar_insertfdd(unsigned char drive, NSString *path);
+/* Ask first, as the menu does. */
+void keybar_confirmreset(void);
+void keybar_confirmloadslot(NSInteger slot);
+void keybar_showmessage(NSString *title, NSString *detail);
+#endif
