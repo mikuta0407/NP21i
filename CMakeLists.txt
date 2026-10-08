@@ -180,6 +180,8 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/trackpad.m
 	${IOS_DIR}/src/gamepad.m
 	${IOS_DIR}/src/profile.m
+	${IOS_DIR}/src/capture.m
+	${IOS_DIR}/src/midirec.m
 	${IOS_DIR}/src/kbdlayout.m
 	${IOS_DIR}/src/kbdview.m
 	${IOS_DIR}/src/diskfs.c
@@ -237,7 +239,8 @@ target_compile_options(NP21iOS PRIVATE
 # which makes the main loop run frames in bursts and ruins MIDI timing.
 set_source_files_properties(${NP2_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-everything;-O2")
 
-target_link_libraries(NP21iOS PRIVATE ${SDL_LIBRARIES} "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers" "-framework CoreAudioKit")
+target_link_libraries(NP21iOS PRIVATE ${SDL_LIBRARIES} "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers" "-framework CoreAudioKit"
+	"-framework AVFoundation" "-framework CoreMedia" "-framework CoreVideo")
 
 # Settings app entries (copied as a folder; CodeSign runs after this step).
 add_custom_command(TARGET NP21iOS POST_BUILD

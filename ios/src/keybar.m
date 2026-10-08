@@ -30,6 +30,8 @@
 #include "trackpad.h"
 #include "gamepad.h"
 #include "profile.h"
+#include "capture.h"
+#include "midirec.h"
 #include "lifecycle.h"
 #include "settings.h"
 #include "settingsview.h"
@@ -255,6 +257,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	NP2DPad *_dpad;
 	NP2TrackpadView *_trackpad;	/* under everything, over SDL's view */
 	BOOL _pointerLocked;		/* a connected mouse moves the PC-98 mouse by travel */
+	UIButton *_recordButton;	/* shown while recording (video, MIDI): stops it */
 	UIButton *_hideButton;
 	UIButton *_showButton;
 	UILabel *_speedLabel;
@@ -346,6 +349,20 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	_speedLabel.hidden = YES;
 	[self addSubview:_speedLabel];
 
+	_recordButton = [UIButton buttonWithType:UIButtonTypeCustom];
+	_recordButton.titleLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightSemibold];
+	[_recordButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+	_recordButton.backgroundColor = [UIColor.systemRedColor colorWithAlphaComponent:0.85];
+	_recordButton.layer.cornerRadius = 6;
+	_recordButton.hidden = YES;
+	_recordButton.showsMenuAsPrimaryAction = YES;
+	_recordButton.accessibilityIdentifier = @"recording";
+	__weak NP2KeyBar *weakBar = self;
+	_recordButton.menu = [UIMenu menuWithChildren:@[ [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+		completion([weakBar recordingStopItems]);
+	}] ]];
+	[self addSubview:_recordButton];
+
 	NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
 	[nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
 	[nc addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
@@ -363,6 +380,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		[bar refreshSpeed];
 		[bar checkScreenSize];
 		[bar updatePointerLock];
+		[bar refreshRecording];
 	}];
 	hinge_observe(self, ^(NP2HingePosture posture) {
 		[weakSelf hingeChanged:posture];
@@ -510,6 +528,97 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		np21_setrelativemouse(lock);
 		NSLog(@"keybar: pointer %s", lock ? "locked" : "unlocked");
 	}
+}
+
+// ---- recording (video, MIDI)
+
+- (void)refreshRecording
+{
+	NSMutableArray<NSString *> *parts = [NSMutableArray array];
+	if (capture_isrecording()) {
+		[parts addObject:@"● 録画"];
+	}
+	if (midirec_isrecording()) {
+		NSTimeInterval t = midirec_duration();
+		[parts addObject:[NSString stringWithFormat:@"● MIDI %d:%02d", (int)t / 60, (int)t % 60]];
+	}
+	BOOL show = parts.count > 0;
+	if (show) {
+		[_recordButton setTitle:[parts componentsJoinedByString:@"  "] forState:UIControlStateNormal];
+	}
+	if (_recordButton.hidden == show) {
+		_recordButton.hidden = !show;
+		[self setNeedsLayout];
+	}
+	else if (show) {
+		[self setNeedsLayout];
+	}
+}
+
+- (void)layoutRecordButtonAt:(CGPoint)origin
+{
+	CGSize size = [_recordButton.titleLabel sizeThatFits:CGSizeMake(300, 22)];
+	_recordButton.frame = CGRectMake(origin.x, origin.y, ceil(size.width) + 16, 22);
+}
+
+- (NSArray<UIMenuElement *> *)recordingStopItems
+{
+	__weak NP2KeyBar *weakSelf = self;
+	NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
+	if (capture_isrecording()) {
+		[items addObject:[UIAction actionWithTitle:@"録画を止める" image:[UIImage systemImageNamed:@"stop.circle"] identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			capture_stoprecording([weakSelf hostController]);
+			[weakSelf refreshRecording];
+		}]];
+	}
+	if (midirec_isrecording()) {
+		[items addObject:[UIAction actionWithTitle:@"MIDI の記録を止める" image:[UIImage systemImageNamed:@"stop.circle"] identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			midirec_stop([weakSelf hostController]);
+			[weakSelf refreshRecording];
+		}]];
+	}
+	return items;
+}
+
+- (UIMenu *)captureMenu
+{
+	__weak NP2KeyBar *weakSelf = self;
+	NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
+	[items addObject:[UIAction actionWithTitle:@"スクリーンショット" image:[UIImage systemImageNamed:@"camera"] identifier:nil handler:^(UIAction *a) {
+		(void)a;
+		capture_screenshot([weakSelf hostController]);
+	}]];
+	if (capture_isrecording()) {
+		[items addObject:[UIAction actionWithTitle:@"録画を止める" image:[UIImage systemImageNamed:@"stop.circle"] identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			capture_stoprecording([weakSelf hostController]);
+			[weakSelf refreshRecording];
+		}]];
+	}
+	else {
+		[items addObject:[UIAction actionWithTitle:@"画面を録画" image:[UIImage systemImageNamed:@"record.circle"] identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			capture_startrecording();
+			[weakSelf refreshRecording];
+		}]];
+	}
+	if (midirec_isrecording()) {
+		[items addObject:[UIAction actionWithTitle:@"MIDI の記録を止める" image:[UIImage systemImageNamed:@"stop.circle"] identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			midirec_stop([weakSelf hostController]);
+			[weakSelf refreshRecording];
+		}]];
+	}
+	else {
+		[items addObject:[UIAction actionWithTitle:@"MIDI を記録" image:[UIImage systemImageNamed:@"pianokeys"] identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			midirec_start();
+			[weakSelf refreshRecording];
+		}]];
+	}
+	return [UIMenu menuWithTitle:@"記録" image:[UIImage systemImageNamed:@"camera"] identifier:nil options:0 children:items];
 }
 
 - (void)hingeChanged:(NP2HingePosture)posture
@@ -736,6 +845,9 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		menu.subtitle = profile_name(profile_active());
 		completion(@[ menu ]);
 	}];
+	UIDeferredMenuElement *capture = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+		completion(@[ [weakSelf captureMenu] ]);
+	}];
 	UIDeferredMenuElement *trackpad = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
 		UIAction *action = [UIAction actionWithTitle:@"画面をタッチパッドにする" image:[UIImage systemImageNamed:@"rectangle.and.hand.point.up.left"]
 		                                  identifier:nil handler:^(UIAction *a) {
@@ -762,7 +874,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	}];
 	return [UIMenu menuWithChildren:@[
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ profiles, fdd, hdd, files ]],
-		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ trackpad ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ capture, trackpad ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, np2menu, reset ]],
 	]];
 }
@@ -1129,6 +1241,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	CGSize speed = CGSizeMake(84, 22);
 	CGFloat right = (vertical && !_hidden) ? CGRectGetMinX(frame) : bounds.size.width - safe.right;
 	_speedLabel.frame = CGRectMake(right - speed.width - kGap, MAX(safe.top, kGap), speed.width, speed.height);
+	[self layoutRecordButtonAt:CGPointMake(MAX(safe.left, kGap), MAX(safe.top, kGap))];
 
 	CGSize show = CGSizeMake(44, 30);
 	_showButton.frame = CGRectMake(bounds.size.width - safe.right - show.width - kGap,
@@ -1182,6 +1295,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 
 	CGSize speed = CGSizeMake(84, 22);
 	_speedLabel.frame = CGRectMake(CGRectGetMaxX(screenHalf) - speed.width - kGap, MAX(safe.top, kGap), speed.width, speed.height);
+	[self layoutRecordButtonAt:CGPointMake(screenHalf.origin.x + kGap, MAX(safe.top, kGap))];
 	CGSize show = CGSizeMake(44, 30);
 	_showButton.frame = CGRectMake(CGRectGetMaxX(inputHalf) - safe.right - show.width - kGap,
 		MAX(safe.top, kGap), show.width, show.height);
@@ -1406,6 +1520,28 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		if (![_trackpad debugCommand:command]) {
 			NSLog(@"keybar: unknown command %@", command);
 		}
+	}
+	else if ([command isEqualToString:@"!shot"]) {
+		capture_screenshot([self hostController]);
+	}
+	else if ([command hasPrefix:@"!rec:"]) {
+		/* "!rec:start" / "!rec:stop" (video) */
+		if ([command hasSuffix:@"start"]) {
+			capture_startrecording();
+		}
+		else {
+			capture_stoprecording(nil);
+		}
+		[self refreshRecording];
+	}
+	else if ([command hasPrefix:@"!midirec:"]) {
+		if ([command hasSuffix:@"start"]) {
+			midirec_start();
+		}
+		else {
+			midirec_stop(nil);
+		}
+		[self refreshRecording];
 	}
 	else if ([command hasPrefix:@"!profile:"]) {
 		/* "!profile:new:<name>:<copy|share|none>", "!profile:switch:<name>",

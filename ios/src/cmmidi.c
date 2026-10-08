@@ -25,6 +25,7 @@
 #include "commng.h"
 #include "cmmidi.h"
 #include "midiport.h"
+#include "midirec.h"
 #include <common/mimpidef.h>
 #include <sound/sound.h>
 
@@ -309,6 +310,7 @@ midi_send(CMMIDI midi, const UINT8 *buf, UINT leng)
 	UINT64 timestamp = midi_timestamp(midi);
 
 	midiclk_log(timestamp);
+	midirec_event(buf, leng, timestamp ? timestamp : mach_absolute_time());
 	midiport_send(midi->hmidiout, buf, leng, timestamp);
 }
 

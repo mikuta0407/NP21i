@@ -1,0 +1,40 @@
+diff --git a/sdl/soundmng.c b/sdl/soundmng.c
+--- a/sdl/soundmng.c
++++ b/sdl/soundmng.c
+@@ -102,6 +102,9 @@
+ static int audio_fd = -1;
+ #endif
+ static BOOL opened = FALSE;
++#if defined(NP2_IOS_KEYBAR)
++void (*soundmng_iostap)(const SINT16 *samples, UINT bytes);
++#endif
+ static UINT opna_frame;
+ 
+ static BRESULT nosound_setup(void);
+@@ -451,6 +454,11 @@
+ 			pcm = sound_pcmlock();
+ 			if(pcm) {
+ 				(*fnmix)((SINT16 *)sndbuf->buf, pcm, opna_frame);
++#if defined(NP2_IOS_KEYBAR)
++				if (soundmng_iostap) {
++					(*soundmng_iostap)((const SINT16 *)sndbuf->buf, opna_frame);
++				}
++#endif
+ 			}
+ 			sound_pcmunlock(pcm);
+ 			sndbuf->remain = sndbuf->size;
+diff --git a/sdl/soundmng.h b/sdl/soundmng.h
+--- a/sdl/soundmng.h
++++ b/sdl/soundmng.h
+@@ -26,6 +26,11 @@
+ void soundmng_play(void);
+ void soundmng_stop(void);
+ void soundmng_sync(void);
++#if defined(NP2_IOS_KEYBAR)
++/* Called with each block of sound as it is mixed (16-bit stereo at
++ * np2cfg.samplingrate), e.g. to record it; on the emulator's thread. */
++extern void (*soundmng_iostap)(const SINT16 *samples, UINT bytes);
++#endif
+ void soundmng_setreverse(BOOL reverse);
+ 
+ BRESULT soundmng_pcmplay(UINT num, BOOL loop);
