@@ -303,7 +303,7 @@ static NSString *port_label(const char *selection)
 
 /* Choices for an MIDI port selection: all, none, then each device. A
  * selected device that is not connected now is kept in the list. */
-static UIViewController *port_screen(NSString *title, BOOL sources, char *selection, size_t size)
+static UIViewController *port_screen(NSString *title, BOOL sources, char *selection, size_t size, NSString *virtualName)
 {
 	NSMutableArray<NSString *> *values = [NSMutableArray arrayWithObjects:kAllPorts, kNoPort, nil];
 	midiport_list(sources, ^(const char *name) {
@@ -319,8 +319,8 @@ static UIViewController *port_screen(NSString *title, BOOL sources, char *select
 		[labels addObject:port_label(value.UTF8String)];
 	}
 	NSString *footer = sources
-		? @"「すべての機器」は接続中のすべての MIDI 機器から受け取ります。他のアプリからは「NP21 MIDI IN」に送れます。"
-		: @"「すべての機器」は接続中のすべての MIDI 機器に送ります。他のアプリは「NP21 MIDI OUT」から受け取れます。";
+		? [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器から受け取ります。他のアプリからは「NP21 MIDI IN%@」に送れます。", virtualName]
+		: [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器に送ります。他のアプリは「NP21 MIDI OUT%@」から受け取れます。", virtualName];
 	return choice_screen(title, footer, labels, ^NSInteger {
 		NSString *now = [NSString stringWithUTF8String:selection];
 		NSUInteger index = [values indexOfObject:now.length ? now : kAllPorts];
@@ -836,10 +836,10 @@ static NSArray<NP2Section *> *settings_sections(void)
 
 	[sections addObject:section(@"MIDI", @"MPU-PC98II の接続先です。Bluetooth MIDI 機器は「Bluetooth MIDI 機器」で接続すると一覧に出ます。「MIDI クロックを送る」をオンにすると、ソフトが演奏を始めたときにスタートとクロック（1 拍 24 回）を出し、外部のシーケンサーやリズムマシン、DAW をテンポに合わせて動かせます。逆に外部のクロックに合わせるときは、ソフト側の同期を MIDI にします（レコンポーザの SYNC MODE: MIDI）。", @[
 		detail_row(@"出力先", ^NSString *{ return port_label(np2oscfg.mpu.mout); }, ^(UIViewController *c) {
-			[c.navigationController pushViewController:port_screen(@"出力先", NO, np2oscfg.mpu.mout, sizeof(np2oscfg.mpu.mout)) animated:YES];
+			[c.navigationController pushViewController:port_screen(@"出力先", NO, np2oscfg.mpu.mout, sizeof(np2oscfg.mpu.mout), @"") animated:YES];
 		}),
 		detail_row(@"入力元", ^NSString *{ return port_label(np2oscfg.mpu.min); }, ^(UIViewController *c) {
-			[c.navigationController pushViewController:port_screen(@"入力元", YES, np2oscfg.mpu.min, sizeof(np2oscfg.mpu.min)) animated:YES];
+			[c.navigationController pushViewController:port_screen(@"入力元", YES, np2oscfg.mpu.min, sizeof(np2oscfg.mpu.min), @"") animated:YES];
 		}),
 		detail_row(@"Bluetooth MIDI 機器", nil, ^(UIViewController *c) {
 			[c.navigationController pushViewController:[CABTMIDICentralViewController new] animated:YES];
@@ -854,6 +854,21 @@ static NSArray<NP2Section *> *settings_sections(void)
 			[c.navigationController pushViewController:latency_screen(@"入力の遅延", kSettingMidiInputLatency, @[ @0, @20, @30, @50 ], 20) animated:YES];
 		}),
 	])];
+
+	if (np2cfg.smpuenable) {
+		/* S-MPU (PC-9801-118's MIDI or the S-MPU board): two ports, each with its own devices */
+		NP2Row *(^port)(NSString *, BOOL, char *, size_t, NSString *) = ^NP2Row *(NSString *title, BOOL sources, char *selection, size_t size, NSString *virtualName) {
+			return detail_row(title, ^NSString *{ return port_label(selection); }, ^(UIViewController *c) {
+				[c.navigationController pushViewController:port_screen(title, sources, selection, size, virtualName) animated:YES];
+			});
+		};
+		[sections addObject:section(@"S-MPU", @"S-MPU の 2 つのポートの接続先です。ポート A はほかのアプリからは「NP21 MIDI OUT」「NP21 MIDI IN」、ポート B は「NP21 MIDI OUT B」「NP21 MIDI IN B」でつなげます。", @[
+			port(@"ポート A の出力先", NO, np2oscfg.smpuA.mout, sizeof(np2oscfg.smpuA.mout), @""),
+			port(@"ポート A の入力元", YES, np2oscfg.smpuA.min, sizeof(np2oscfg.smpuA.min), @""),
+			port(@"ポート B の出力先", NO, np2oscfg.smpuB.mout, sizeof(np2oscfg.smpuB.mout), @" B"),
+			port(@"ポート B の入力元", YES, np2oscfg.smpuB.min, sizeof(np2oscfg.smpuB.min), @" B"),
+		])];
+	}
 
 	{
 		/* the sound generators' volumes, 0-128 in np2cfg (np21kai.cfg) */

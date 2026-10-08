@@ -810,11 +810,11 @@ cmmidi_create(const UINT device, const char *midiout, const char *midiin, const 
 	MIDIHDL vermouth = NULL;
 #endif
 	int opened = 0;
-
-	(void)device;
+	/* S-MPU's port B has its own virtual endpoints, the others share the main ones */
+	UINT virtual = (device == COMCREATE_SMPU98_B) ? 1 : 0;
 
 	/* MIDI-IN */
-	hmidiin = midiport_openin(midiin);
+	hmidiin = midiport_openin(midiin, virtual);
 	if (hmidiin) {
 		opened |= CMMIDI_MIDIIN;
 	}
@@ -832,7 +832,7 @@ cmmidi_create(const UINT device, const char *midiout, const char *midiin, const 
 	else
 #endif
 	{
-		hmidiout = midiport_openout(midiout);
+		hmidiout = midiport_openout(midiout, virtual);
 		if (hmidiout) {
 			outfn = midiout_device;
 			opened |= CMMIDI_MIDIOUT;

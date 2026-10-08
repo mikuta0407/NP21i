@@ -14,6 +14,9 @@
  * Independently of the selection, an opened output is always also sent to the
  * app's virtual source "NP21 MIDI OUT", and an opened input always also receives
  * from the app's virtual destination "NP21 MIDI IN", so other apps can connect.
+ * S-MPU's port B has its own pair, "NP21 MIDI OUT B" / "NP21 MIDI IN B"
+ * (`virtual` 1). Each open input gets everything its sources send, so two
+ * inputs can take from the same device.
  */
 
 #pragma once
@@ -24,6 +27,10 @@ extern "C" {
 
 #define MIDIPORT_ALL		"*"
 #define MIDIPORT_NC			"N/C"
+
+enum {
+	MIDIPORT_VIRTUALS	= 2		/* virtual endpoint pairs: the main port and S-MPU's B */
+};
 
 typedef struct _midiport_out *MIDIPORTOUT;
 typedef struct _midiport_in *MIDIPORTIN;
@@ -39,19 +46,23 @@ void midiport_list(BOOL sources, void (^callback)(const char *name));
 extern void (*midiport_onchange)(void);
 
 /* Returns NULL only when CoreMIDI is unavailable. `selection` must stay valid
- * until the handle is closed. */
-MIDIPORTOUT midiport_openout(const char *selection);
+ * until the handle is closed. `virtual`: which of the app's virtual endpoint
+ * pairs also gets the data (0 "NP21 MIDI OUT/IN", 1 "... B"). */
+MIDIPORTOUT midiport_openout(const char *selection, UINT virtual);
 /* timestamp: mach_absolute_time() based host time to deliver at, 0 = now. */
 void midiport_send(MIDIPORTOUT hdl, const UINT8 *data, UINT length, UINT64 timestamp);
 void midiport_closeout(MIDIPORTOUT hdl);
 
-MIDIPORTIN midiport_openin(const char *selection);
+MIDIPORTIN midiport_openin(const char *selection, UINT virtual);
 /* Non-blocking. Returns 1 and stores a byte when a byte that arrived at or
  * before host time `until` (mach_absolute_time based, 0 = any) is available. */
 UINT midiport_read(MIDIPORTIN hdl, UINT8 *data, UINT64 until);
 /* Arrival time of the byte returned by the last successful midiport_read. */
 UINT64 midiport_lastreadtime(MIDIPORTIN hdl);
 void midiport_closein(MIDIPORTIN hdl);
+
+/* Testing: logs each open input and the bytes waiting in it. */
+void midiport_debugdump(void);
 
 #ifdef __cplusplus
 }

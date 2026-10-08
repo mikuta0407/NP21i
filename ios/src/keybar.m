@@ -37,6 +37,7 @@
 #include "settings.h"
 #include "settingsview.h"
 #include "diskedit.h"
+#include "midiport.h"
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -1639,7 +1640,10 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	if (diskedit_debugcommand(command) || gamepad_debugcommand(command)) {
 		return;
 	}
-	if ([command hasPrefix:@"!insert"] && command.length > 9) {
+	if ([command isEqualToString:@"!midiports"]) {
+		midiport_debugdump();
+	}
+	else if ([command hasPrefix:@"!insert"] && command.length > 9) {
 		insert_fdd((REG8)([command characterAtIndex:7] - '1'), [command substringFromIndex:9]);
 	}
 	else if ([command isEqualToString:@"!eject1"] || [command isEqualToString:@"!eject2"]) {

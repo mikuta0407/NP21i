@@ -13,7 +13,8 @@
  *
  * NP2_DEBUG_MIDIIN="<delay ms>:<hex bytes>,..."
  *   Sends the given messages to the virtual destination "NP21 MIDI IN",
- *   e.g. "40000:90 3c 64,500:80 3c 00".
+ *   e.g. "40000:90 3c 64,500:80 3c 00". "B" before the bytes sends to
+ *   "NP21 MIDI IN B" (S-MPU port B) instead: "500:B 90 3c 64".
  *   While the app runs, a script written to debugmidiin.txt in the data
  *   directory is also sent (same format) and the file is deleted.
  */
@@ -98,21 +99,33 @@ static void start_monitor(void)
 	NSLog(@"debugmidi: monitoring NP21 MIDI OUT -> midimon.log");
 }
 
-static void send_script(char *script, MIDIPortRef port, MIDIEndpointRef dst)
+static void send_script(char *script, MIDIPortRef port, MIDIEndpointRef dsta, MIDIEndpointRef dstb)
 {
 	char *saveptr = NULL;
 
 	for (char *step = strtok_r(script, ",", &saveptr); step; step = strtok_r(NULL, ",", &saveptr)) {
 		char *colon = strchr(step, ':');
-		if (!colon || !dst) {
+		if (!colon) {
 			continue;
 		}
 		*colon = '\0';
 		usleep((useconds_t)atoi(step) * 1000);
 
+		char *p = colon + 1;
+		while (*p == ' ') {
+			p++;
+		}
+		MIDIEndpointRef dst = dsta;
+		if (p[0] == 'B' && p[1] == ' ') {	/* not a status byte like "B0" */
+			dst = dstb;
+			p += 2;
+		}
+		if (!dst) {
+			continue;
+		}
 		Byte bytes[256];
 		UInt16 count = 0;
-		for (char *p = colon + 1; *p && count < sizeof(bytes);) {
+		while (*p && count < sizeof(bytes)) {
 			char *end;
 			long v = strtol(p, &end, 16);
 			if (end == p) {
@@ -140,12 +153,11 @@ static void send_script(char *script, MIDIPortRef port, MIDIEndpointRef dst)
 static void *midiin_thread(void *arg)
 {
 	char *script = arg;
-	MIDIEndpointRef dst = find_endpoint(FALSE, @"NP21 MIDI IN");
 	MIDIPortRef port;
 	MIDIOutputPortCreate(s_client, CFSTR("feeder"), &port);
 
 	if (script) {
-		send_script(script, port, dst);
+		send_script(script, port, find_endpoint(FALSE, @"NP21 MIDI IN"), find_endpoint(FALSE, @"NP21 MIDI IN B"));
 		free(script);
 	}
 	/* cwd is the data directory (see main.m) */
@@ -161,7 +173,7 @@ static void *midiin_thread(void *arg)
 		remove("debugmidiin.txt");
 		buf[n] = '\0';
 		buf[strcspn(buf, "\r\n")] = '\0';
-		send_script(buf, port, dst);
+		send_script(buf, port, find_endpoint(FALSE, @"NP21 MIDI IN"), find_endpoint(FALSE, @"NP21 MIDI IN B"));
 	}
 	return NULL;
 }

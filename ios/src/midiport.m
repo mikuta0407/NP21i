@@ -17,8 +17,14 @@
  * calls take as-is (including SysEx). */
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-#define VIRTUAL_OUT_NAME	CFSTR("NP21 MIDI OUT")
-#define VIRTUAL_IN_NAME		CFSTR("NP21 MIDI IN")
+/* The app's virtual endpoints, one pair per MIDI port of the emulated board
+ * (the B pair only for S-MPU port B, created when it is opened). */
+static const CFStringRef s_virtualoutnames[MIDIPORT_VIRTUALS] = {
+	CFSTR("NP21 MIDI OUT"), CFSTR("NP21 MIDI OUT B")
+};
+static const CFStringRef s_virtualinnames[MIDIPORT_VIRTUALS] = {
+	CFSTR("NP21 MIDI IN"), CFSTR("NP21 MIDI IN B")
+};
 
 enum {
 	MIDIIN_RINGSIZE		= 1 << 14,		/* power of two */
@@ -27,6 +33,7 @@ enum {
 
 struct _midiport_out {
 	const char		*selection;		/* live: points into the config */
+	UINT			virtual;		/* which "NP21 MIDI OUT" also gets the data */
 	MIDIEndpointRef	dests[32];
 	UINT			ndests;
 	MIDIPORTOUT		next;
@@ -39,6 +46,8 @@ typedef struct {
 
 struct _midiport_in {
 	const char		*selection;		/* live: points into the config */
+	UINT			virtual;		/* which "NP21 MIDI IN" it also receives */
+	MIDIPortRef		port;			/* its own, so that each input gets every source */
 	MIDIPORTIN		next;
 	MIDIEndpointRef	sources[MIDIIN_MAXSOURCES];
 	UINT			nsources;
@@ -51,11 +60,9 @@ struct _midiport_in {
 
 static MIDIClientRef s_client;
 static MIDIPortRef s_outport;
-static MIDIPortRef s_inport;
-static MIDIEndpointRef s_virtualout;
-static MIDIEndpointRef s_virtualin;
-static os_unfair_lock s_inlock = OS_UNFAIR_LOCK_INIT;
-static MIDIPORTIN s_activein;		/* receives data from s_virtualin */
+static MIDIEndpointRef s_virtualout[MIDIPORT_VIRTUALS];
+static MIDIEndpointRef s_virtualin[MIDIPORT_VIRTUALS];
+static os_unfair_lock s_inlock = OS_UNFAIR_LOCK_INIT;	/* guards s_ins for the CoreMIDI thread */
 static MIDIPORTOUT s_outs;			/* open handles, re-resolved on changes */
 static MIDIPORTIN s_ins;
 
@@ -79,6 +86,16 @@ static BOOL selection_matches(const char *selection, MIDIEndpointRef ep)
 	return [endpoint_name(ep) rangeOfString:wanted options:NSCaseInsensitiveSearch].location != NSNotFound;
 }
 
+static BOOL is_virtual(MIDIEndpointRef ep)
+{
+	for (UINT i = 0; i < MIDIPORT_VIRTUALS; i++) {
+		if (ep && (ep == s_virtualout[i] || ep == s_virtualin[i])) {
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 static BOOL is_nc(const char *selection)
 {
 	return selection != NULL && milstr_cmp(selection, MIDIPORT_NC) == 0;
@@ -92,7 +109,7 @@ static void resolve_out(MIDIPORTOUT out)
 	}
 	for (ItemCount i = 0; i < MIDIGetNumberOfDestinations() && out->ndests < NELEMENTS(out->dests); i++) {
 		MIDIEndpointRef ep = MIDIGetDestination(i);
-		if (ep == s_virtualin) {
+		if (is_virtual(ep)) {
 			continue;	/* never loop back into ourselves */
 		}
 		if (selection_matches(out->selection, ep)) {
@@ -105,7 +122,7 @@ static void resolve_out(MIDIPORTOUT out)
 static void resolve_in(MIDIPORTIN in)
 {
 	for (UINT i = 0; i < in->nsources; i++) {
-		MIDIPortDisconnectSource(s_inport, in->sources[i]);
+		MIDIPortDisconnectSource(in->port, in->sources[i]);
 	}
 	in->nsources = 0;
 	if (is_nc(in->selection)) {
@@ -113,11 +130,11 @@ static void resolve_in(MIDIPORTIN in)
 	}
 	for (ItemCount i = 0; i < MIDIGetNumberOfSources() && in->nsources < MIDIIN_MAXSOURCES; i++) {
 		MIDIEndpointRef ep = MIDIGetSource(i);
-		if (ep == s_virtualout) {
+		if (is_virtual(ep)) {
 			continue;
 		}
 		if (selection_matches(in->selection, ep)) {
-			MIDIPortConnectSource(s_inport, ep, NULL);
+			MIDIPortConnectSource(in->port, ep, NULL);
 			in->sources[in->nsources++] = ep;
 			NSLog(@"midiport: input <- %@", endpoint_name(ep));
 		}
@@ -142,7 +159,7 @@ void midiport_list(BOOL sources, void (^callback)(const char *name))
 	ItemCount n = sources ? MIDIGetNumberOfSources() : MIDIGetNumberOfDestinations();
 	for (ItemCount i = 0; i < n; i++) {
 		MIDIEndpointRef ep = sources ? MIDIGetSource(i) : MIDIGetDestination(i);
-		if (ep == s_virtualout || ep == s_virtualin) {
+		if (is_virtual(ep)) {
 			continue;
 		}
 		callback(endpoint_name(ep).UTF8String);
@@ -165,25 +182,62 @@ static void ring_push(MIDIPORTIN in, const UINT8 *data, UINT length, UINT64 time
 	atomic_store_explicit(&in->head, head, memory_order_release);
 }
 
+static void push_packets(MIDIPORTIN in, const MIDIPacketList *list)
+{
+	const MIDIPacket *packet = &list->packet[0];
+	UINT64 now = mach_absolute_time();
+	for (UInt32 i = 0; i < list->numPackets; i++) {
+		/* Drivers stamp the arrival time; virtual sources may send 0 or a
+		 * future time, which are treated as "now". */
+		UINT64 time = (packet->timeStamp && packet->timeStamp <= now) ? packet->timeStamp : now;
+		ring_push(in, packet->data, packet->length, time);
+		packet = MIDIPacketNext(packet);
+	}
+}
+
+/* From the hardware / network sources of one input (refCon: the handle). */
 static void read_proc(const MIDIPacketList *list, void *readProcRefCon, void *srcConnRefCon)
 {
-	(void)readProcRefCon;
 	(void)srcConnRefCon;
 
 	os_unfair_lock_lock(&s_inlock);
-	MIDIPORTIN in = s_activein;
-	if (in) {
-		const MIDIPacket *packet = &list->packet[0];
-		UINT64 now = mach_absolute_time();
-		for (UInt32 i = 0; i < list->numPackets; i++) {
-			/* Drivers stamp the arrival time; virtual sources may send 0 or a
-			 * future time, which are treated as "now". */
-			UINT64 time = (packet->timeStamp && packet->timeStamp <= now) ? packet->timeStamp : now;
-			ring_push(in, packet->data, packet->length, time);
-			packet = MIDIPacketNext(packet);
+	for (MIDIPORTIN in = s_ins; in; in = in->next) {
+		if (in == readProcRefCon) {		/* still open */
+			push_packets(in, list);
+			break;
 		}
 	}
 	os_unfair_lock_unlock(&s_inlock);
+}
+
+/* From other apps, to "NP21 MIDI IN" (refCon: its index): every input of that port gets it. */
+static void virtual_read_proc(const MIDIPacketList *list, void *readProcRefCon, void *srcConnRefCon)
+{
+	(void)srcConnRefCon;
+
+	os_unfair_lock_lock(&s_inlock);
+	for (MIDIPORTIN in = s_ins; in; in = in->next) {
+		if (in->virtual == (UINT)(uintptr_t)readProcRefCon) {
+			push_packets(in, list);
+		}
+	}
+	os_unfair_lock_unlock(&s_inlock);
+}
+
+/* The app's virtual endpoints of port `index`. Need UIBackgroundModes=audio in Info.plist; not fatal. */
+static void create_virtuals(UINT index)
+{
+	if (s_virtualout[index] == 0 &&
+	    MIDISourceCreate(s_client, s_virtualoutnames[index], &s_virtualout[index]) != noErr) {
+		NSLog(@"midiport: could not create virtual source %@", s_virtualoutnames[index]);
+		s_virtualout[index] = 0;
+	}
+	if (s_virtualin[index] == 0 &&
+	    MIDIDestinationCreate(s_client, s_virtualinnames[index], virtual_read_proc,
+	                          (void *)(uintptr_t)index, &s_virtualin[index]) != noErr) {
+		NSLog(@"midiport: could not create virtual destination %@", s_virtualinnames[index]);
+		s_virtualin[index] = 0;
+	}
 }
 
 BOOL midiport_initialize(void)
@@ -209,18 +263,7 @@ BOOL midiport_initialize(void)
 		return FALSE;
 	}
 	MIDIOutputPortCreate(s_client, CFSTR("NP21 Out"), &s_outport);
-	MIDIInputPortCreate(s_client, CFSTR("NP21 In"), read_proc, NULL, &s_inport);
-	/* Virtual endpoints need UIBackgroundModes=audio in Info.plist; not fatal. */
-	err = MIDISourceCreate(s_client, VIRTUAL_OUT_NAME, &s_virtualout);
-	if (err != noErr) {
-		NSLog(@"midiport: could not create virtual source (%d)", (int)err);
-		s_virtualout = 0;
-	}
-	err = MIDIDestinationCreate(s_client, VIRTUAL_IN_NAME, read_proc, NULL, &s_virtualin);
-	if (err != noErr) {
-		NSLog(@"midiport: could not create virtual destination (%d)", (int)err);
-		s_virtualin = 0;
-	}
+	create_virtuals(0);
 	NSLog(@"midiport: %lu destinations, %lu sources",
 		(unsigned long)MIDIGetNumberOfDestinations(), (unsigned long)MIDIGetNumberOfSources());
 
@@ -235,16 +278,18 @@ BOOL midiport_initialize(void)
 
 // ---- output
 
-MIDIPORTOUT midiport_openout(const char *selection)
+MIDIPORTOUT midiport_openout(const char *selection, UINT virtual)
 {
-	if (!midiport_initialize()) {
+	if (!midiport_initialize() || virtual >= MIDIPORT_VIRTUALS) {
 		return NULL;
 	}
 	MIDIPORTOUT out = calloc(1, sizeof(*out));
 	if (out == NULL) {
 		return NULL;
 	}
+	create_virtuals(virtual);
 	out->selection = selection;
+	out->virtual = virtual;
 	resolve_out(out);
 	out->next = s_outs;
 	s_outs = out;
@@ -267,8 +312,8 @@ void midiport_send(MIDIPORTOUT out, const UINT8 *data, UINT length, UINT64 times
 	for (UINT i = 0; i < out->ndests; i++) {
 		MIDISend(s_outport, out->dests[i], list);
 	}
-	if (s_virtualout) {
-		MIDIReceived(s_virtualout, list);
+	if (s_virtualout[out->virtual]) {
+		MIDIReceived(s_virtualout[out->virtual], list);
 	}
 }
 
@@ -285,21 +330,26 @@ void midiport_closeout(MIDIPORTOUT out)
 
 // ---- input
 
-MIDIPORTIN midiport_openin(const char *selection)
+MIDIPORTIN midiport_openin(const char *selection, UINT virtual)
 {
-	if (!midiport_initialize()) {
+	if (!midiport_initialize() || virtual >= MIDIPORT_VIRTUALS) {
 		return NULL;
 	}
 	MIDIPORTIN in = calloc(1, sizeof(*in));
 	if (in == NULL) {
 		return NULL;
 	}
+	create_virtuals(virtual);
 	in->selection = selection;
+	in->virtual = virtual;
+	if (MIDIInputPortCreate(s_client, CFSTR("NP21 In"), read_proc, in, &in->port) != noErr) {
+		free(in);
+		return NULL;
+	}
 	resolve_in(in);
+	os_unfair_lock_lock(&s_inlock);
 	in->next = s_ins;
 	s_ins = in;
-	os_unfair_lock_lock(&s_inlock);
-	s_activein = in;
 	os_unfair_lock_unlock(&s_inlock);
 	return in;
 }
@@ -333,19 +383,23 @@ void midiport_closein(MIDIPORTIN in)
 	if (in == NULL) {
 		return;
 	}
-	for (UINT i = 0; i < in->nsources; i++) {
-		MIDIPortDisconnectSource(s_inport, in->sources[i]);
-	}
+	os_unfair_lock_lock(&s_inlock);
 	for (MIDIPORTIN *p = &s_ins; *p; p = &(*p)->next) {
 		if (*p == in) {
 			*p = in->next;
 			break;
 		}
 	}
-	os_unfair_lock_lock(&s_inlock);
-	if (s_activein == in) {
-		s_activein = NULL;
-	}
 	os_unfair_lock_unlock(&s_inlock);
+	MIDIPortDispose(in->port);
 	free(in);
+}
+
+void midiport_debugdump(void)
+{
+	for (MIDIPORTIN in = s_ins; in; in = in->next) {
+		UINT pending = (atomic_load(&in->head) - atomic_load(&in->tail)) & (MIDIIN_RINGSIZE - 1);
+		NSLog(@"midiport: input %s (virtual %u): %u sources, %u bytes waiting",
+		      in->selection ? in->selection : "", in->virtual, in->nsources, pending);
+	}
 }
