@@ -26,6 +26,13 @@ NS_ASSUME_NONNULL_BEGIN
  * than wide, and the keys are centered in what is left. */
 @property (nonatomic) BOOL fillsHeight;
 
+/* Buttons along the top to switch to another keyboard (nil: none), the
+ * one shown selected, and what a tap on another does. When the blocks are
+ * paged, their tabs share the row. */
+@property (nonatomic, copy, nullable) NSArray<NSString *> *switchTitles;
+@property (nonatomic) NSInteger switchIndex;
+@property (nonatomic, copy, nullable) void (^onSwitch)(NSInteger index);
+
 /* A light tap felt on each key press (default YES). */
 @property (nonatomic) BOOL hapticFeedback;
 /* Character keys show what they type, larger, above the finger while

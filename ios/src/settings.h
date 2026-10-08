@@ -20,6 +20,7 @@ extern NSString *const kSettingResume;				/* BOOL */
 extern NSString *const kSettingShowSpeed;			/* BOOL */
 extern NSString *const kSettingScreenKeyboard;		/* kScreenKeyboardSystem or an NP2KeyboardLayout identifier */
 extern NSString *const kScreenKeyboardSystem;		/* the iOS software keyboard */
+extern NSString *const kSettingScreenKeyboardShown;	/* BOOL: the keyboard was last left shown (default YES) */
 extern NSString *const kSettingKeyHaptics;			/* BOOL: the app's keyboard taps back */
 extern NSString *const kSettingKeyPreview;			/* BOOL: the app's keyboard shows pressed characters larger */
 extern NSString *const kSettingLandscapeFold;		/* half open and wider than tall: 0 keyboard below, 1 screen left, 2 screen right */
@@ -40,6 +41,8 @@ NSString *settings_screenkeyboard(void);
 /* The choices for it, in menu order, and their names. */
 NSArray<NSString *> *settings_screenkeyboards(void);
 NSString *settings_screenkeyboardtitle(NSString *identifier);
+/* A short name, for the switcher above the keyboard. */
+NSString *settings_screenkeyboardshorttitle(NSString *identifier);
 #endif
 
 #ifdef __cplusplus

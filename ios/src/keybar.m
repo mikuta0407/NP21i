@@ -244,6 +244,7 @@ static void setup_text_field(UIViewController *controller);
 - (void)confirmReset;
 - (void)confirmLoadSlot:(NSInteger)slot;
 - (void)openFile:(NSURL *)url;
+- (void)restoreKeyboard;
 @end
 
 /* How the screen and the app's keyboard share a half open iPhone Duo. */
@@ -262,6 +263,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	UIButton *_softkbdButton;
 	NP2KeyboardView *_screenKeyboard;	/* the app's own keyboard, nil until first shown */
 	BOOL _screenKeyboardShown;
+	UISegmentedControl *_systemSwitcher;	/* above iOS's keyboard */
 	NP2HingePosture _hinge;
 	NP2Fold _fold;			/* folded: the keyboard takes part of the screen */
 	BOOL _shownForFold;		/* the keyboard came up by itself when folded */
@@ -913,12 +915,76 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	_shownForFold = NO;
 	/* with a hardware keyboard, iOS shows only a thin shortcut bar */
 	BOOL systemShown = _softKeyboardShown && CGRectGetHeight(_keyboardFrame) > 150;
-	if (_screenKeyboardShown || systemShown) {
-		[self hideKeyboards];
-	}
-	else {
+	BOOL show = !(_screenKeyboardShown || systemShown);
+	if (show) {
 		[self showKeyboard];
 	}
+	else {
+		[self hideKeyboards];
+	}
+	[[NSUserDefaults standardUserDefaults] setBool:show forKey:kSettingScreenKeyboardShown];
+}
+
+/* At start: the app's keyboard as it was left (shown unless hidden by hand).
+ * iOS's keyboard is not brought up by itself: it covers the screen. */
+- (void)restoreKeyboard
+{
+	if ([[NSUserDefaults standardUserDefaults] boolForKey:kSettingScreenKeyboardShown] &&
+	    [NP2KeyboardLayout layoutWithIdentifier:settings_screenkeyboard()] != nil) {
+		[self showKeyboard];
+	}
+}
+
+/* The switcher's choices: every keyboard, iOS's last. */
+- (void)switchKeyboardTo:(NSInteger)index
+{
+	NSArray<NSString *> *identifiers = settings_screenkeyboards();
+	if (index >= 0 && index < (NSInteger)identifiers.count) {
+		[self chooseKeyboard:identifiers[(NSUInteger)index]];
+	}
+}
+
+- (void)setUpSwitcher
+{
+	NSMutableArray<NSString *> *titles = [NSMutableArray array];
+	for (NSString *identifier in settings_screenkeyboards()) {
+		[titles addObject:settings_screenkeyboardshorttitle(identifier)];
+	}
+	NSInteger index = (NSInteger)[settings_screenkeyboards() indexOfObject:settings_screenkeyboard()];
+	__weak NP2KeyBar *weakSelf = self;
+	_screenKeyboard.switchTitles = titles;
+	_screenKeyboard.switchIndex = index;
+	_screenKeyboard.onSwitch = ^(NSInteger chosen) {
+		[weakSelf switchKeyboardTo:chosen];
+	};
+	/* the same above iOS's keyboard, to come back from it */
+	if (_systemSwitcher == nil) {
+		_systemSwitcher = [[UISegmentedControl alloc] initWithItems:titles];
+		[_systemSwitcher addTarget:self action:@selector(systemSwitcherChanged) forControlEvents:UIControlEventValueChanged];
+	}
+	_systemSwitcher.selectedSegmentIndex = (NSInteger)[settings_screenkeyboards() indexOfObject:kScreenKeyboardSystem];
+}
+
+- (void)systemSwitcherChanged
+{
+	[self switchKeyboardTo:_systemSwitcher.selectedSegmentIndex];
+}
+
+/* A bar with the switcher, above iOS's keyboard. */
+- (UIView *)systemKeyboardAccessory
+{
+	[self setUpSwitcher];
+	UIInputView *bar = [[UIInputView alloc] initWithFrame:CGRectMake(0, 0, 320, 44) inputViewStyle:UIInputViewStyleKeyboard];
+	_systemSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
+	[_systemSwitcher removeFromSuperview];
+	[bar addSubview:_systemSwitcher];
+	[NSLayoutConstraint activateConstraints:@[
+		[_systemSwitcher.centerXAnchor constraintEqualToAnchor:bar.centerXAnchor],
+		[_systemSwitcher.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
+		[_systemSwitcher.widthAnchor constraintLessThanOrEqualToAnchor:bar.widthAnchor constant:-16],
+		[_systemSwitcher.widthAnchor constraintLessThanOrEqualToConstant:480],
+	]];
+	return bar;
 }
 
 - (void)showKeyboard
@@ -938,6 +1004,7 @@ static UIImage *slot_thumbnail(NSInteger slot)
 		[self bringSubviewToFront:_bar];
 	}
 	_screenKeyboard.layout = layout;
+	[self setUpSwitcher];
 	_screenKeyboard.hapticFeedback = settings_keyhaptics();
 	_screenKeyboard.keyPreview = settings_keypreview();
 	[self setScreenKeyboardShown:YES];
@@ -946,6 +1013,12 @@ static UIImage *slot_thumbnail(NSInteger slot)
 - (void)hideKeyboards
 {
 	[self setScreenKeyboardShown:NO];
+	/* with a hardware keyboard iOS shows only the bar above its keyboard,
+	 * and text input stays on: take the bar away */
+	if (s_textfield.inputAccessoryView) {
+		s_textfield.inputAccessoryView = nil;
+		[s_textfield reloadInputViews];
+	}
 	/* SDL enables text input from the start without showing the keyboard,
 	 * so look at the keyboard itself. */
 	if (_softKeyboardShown) {
@@ -958,6 +1031,7 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	np21_starttextinput();
 	/* SDL3 sets the text input traits again on every start */
 	setup_text_field(sdl_controller());
+	s_textfield.inputAccessoryView = [self systemKeyboardAccessory];
 	[s_textfield reloadInputViews];
 }
 
@@ -993,6 +1067,7 @@ static UIImage *slot_thumbnail(NSInteger slot)
 - (void)chooseKeyboard:(NSString *)identifier
 {
 	[[NSUserDefaults standardUserDefaults] setObject:identifier forKey:kSettingScreenKeyboard];
+	[[NSUserDefaults standardUserDefaults] setBool:YES forKey:kSettingScreenKeyboardShown];
 	_shownForFold = NO;
 	[self hideKeyboards];
 	[self showKeyboard];
@@ -1018,6 +1093,7 @@ static UIImage *slot_thumbnail(NSInteger slot)
 		}
 		else if (layout != _screenKeyboard.layout) {
 			_screenKeyboard.layout = layout;
+			[self setUpSwitcher];
 			[self setNeedsLayout];
 		}
 	}
@@ -1834,6 +1910,10 @@ static NP2FileKind file_kind(NSString *name)
 			: [NSURL fileURLWithPath:[[NSFileManager defaultManager].currentDirectoryPath stringByAppendingPathComponent:str]];
 		openurl_open(url);
 	}
+	else if ([command hasPrefix:@"!kbdswitch:"]) {
+		/* as if the switcher above the keyboard (or iOS's) was tapped */
+		[self switchKeyboardTo:[command substringFromIndex:11].integerValue];
+	}
 	else if ([command hasPrefix:@"!extdisplay:"]) {
 		extdisplay_debugshow([command hasSuffix:@":on"]);
 	}
@@ -2208,6 +2288,7 @@ void keybar_initialize(void)
 		keyinput_onchange = refresh_modifiers;
 		keyinput_oncommand = command_key;
 		lifecycle_start();
+		[s_keybar restoreKeyboard];
 		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 			settingsview_presentguideifneeded([s_keybar hostController]);
 			/* files and links given at launch, over the guide if it is shown */

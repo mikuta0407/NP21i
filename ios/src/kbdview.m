@@ -208,6 +208,7 @@ typedef NS_ENUM(NSInteger, CapState) {
 	NSMutableArray<NSValue *> *_hitFrames;		/* parallel to _hitCaps */
 	NSMutableArray<NP2KeyCap *> *_hitCaps;
 	UISegmentedControl *_tabs;
+	UISegmentedControl *_switcher;
 	NSInteger _page;
 	NSMapTable<UITouch *, NP2KeyCap *> *_touches;
 	int _keyCount[0x80];		/* fingers holding each key code */
@@ -234,9 +235,49 @@ typedef NS_ENUM(NSInteger, CapState) {
 		[_tabs setTitleTextAttributes:@{ NSForegroundColorAttributeName: UIColor.whiteColor } forState:UIControlStateNormal];
 		[_tabs addTarget:self action:@selector(tabChanged) forControlEvents:UIControlEventValueChanged];
 		[self addSubview:_tabs];
+		_switcher = [[UISegmentedControl alloc] init];
+		_switcher.selectedSegmentTintColor = [UIColor colorWithRed:0.10 green:0.30 blue:0.55 alpha:1];
+		[_switcher setTitleTextAttributes:@{ NSForegroundColorAttributeName: UIColor.whiteColor,
+		                                     NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightMedium] } forState:UIControlStateNormal];
+		[_switcher addTarget:self action:@selector(switcherChanged) forControlEvents:UIControlEventValueChanged];
+		_switcher.hidden = YES;
+		[self addSubview:_switcher];
 		self.layout = layout;
 	}
 	return self;
+}
+
+- (void)setSwitchTitles:(NSArray<NSString *> *)titles
+{
+	_switchTitles = [titles copy];
+	[_switcher removeAllSegments];
+	[titles enumerateObjectsUsingBlock:^(NSString *title, NSUInteger index, BOOL *stop) {
+		(void)stop;
+		[self->_switcher insertSegmentWithTitle:title atIndex:index animated:NO];
+	}];
+	_switcher.selectedSegmentIndex = _switchIndex;
+	[self setNeedsLayout];
+}
+
+- (void)setSwitchIndex:(NSInteger)index
+{
+	_switchIndex = index;
+	_switcher.selectedSegmentIndex = index;
+}
+
+- (void)switcherChanged
+{
+	NSInteger index = _switcher.selectedSegmentIndex;
+	_switcher.selectedSegmentIndex = _switchIndex;	/* until the owner switches */
+	if (index != _switchIndex && self.onSwitch) {
+		self.onSwitch(index);
+	}
+}
+
+/* A row at the top for the switcher and / or the tabs. */
+- (BOOL)hasTopRowForWidth:(CGFloat)width
+{
+	return _switchTitles.count > 0 || [self pagedForWidth:width];
 }
 
 - (void)setFillsHeight:(BOOL)fillsHeight
@@ -361,7 +402,7 @@ typedef NS_ENUM(NSInteger, CapState) {
 	for (NP2KeyBlock *block in blocks) {
 		rowCount = MAX(rowCount, block.rows.count);
 	}
-	return kPadding * 2 + kKeyGap * (CGFloat)(rowCount - 1) + ([self pagedForWidth:width] ? kTabsHeight + kKeyGap : 0);
+	return kPadding * 2 + kKeyGap * (CGFloat)(rowCount - 1) + ([self hasTopRowForWidth:width] ? kTabsHeight + kKeyGap : 0);
 }
 
 - (CGFloat)heightOfBlocks:(NSArray<NP2KeyBlock *> *)blocks width:(CGFloat)width maxHeight:(CGFloat)maxHeight
@@ -405,9 +446,16 @@ typedef NS_ENUM(NSInteger, CapState) {
 	CGFloat unit = (width - kPadding * 2) / [self unitsForBlocks:blocks];
 
 	CGFloat top = area.origin.y + kPadding;
+	BOOL switcher = _switchTitles.count > 0;
 	_tabs.hidden = !paged;
-	if (paged) {
-		_tabs.frame = CGRectMake(area.origin.x + kPadding, top, width - kPadding * 2, kTabsHeight);
+	_switcher.hidden = !switcher;
+	if (paged || switcher) {
+		CGFloat full = width - kPadding * 2;
+		/* the switcher on the left (as narrow as it reads well), the tabs in the rest */
+		CGFloat switchWidth = switcher ? MIN(full * (paged ? 0.5 : 1.0), 92 * (CGFloat)_switchTitles.count) : 0;
+		_switcher.frame = CGRectMake(area.origin.x + kPadding, top, switchWidth, kTabsHeight);
+		CGFloat tabsX = switcher ? switchWidth + kKeyGap * 3 : 0;
+		_tabs.frame = CGRectMake(area.origin.x + kPadding + tabsX, top, full - tabsX, kTabsHeight);
 		top += kTabsHeight + kKeyGap;
 	}
 	if (_fillsHeight) {
