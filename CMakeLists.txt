@@ -174,6 +174,8 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/debugkeys.m
 	${IOS_DIR}/src/debugmidi.m
 	${IOS_DIR}/src/debugscreen.m
+	${IOS_DIR}/src/textscreen.m
+	${IOS_DIR}/src/clipboard.m
 	${IOS_DIR}/src/cmmidi.c
 	${IOS_DIR}/src/dpad.m
 	${IOS_DIR}/src/hinge.m

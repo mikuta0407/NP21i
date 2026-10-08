@@ -73,6 +73,10 @@ void keyinput_releasemodifier(UINT8 key, BOOL latch);
 /* Called when the state shown by keyinput_isactive() may have changed. */
 extern void (*keyinput_onchange)(void);
 
+/* Called on the main thread for Command + C / V on a hardware keyboard
+ * (letter 'c' or 'v'), which the PC-98 does not get. */
+extern void (*keyinput_oncommand)(char letter);
+
 #ifdef __cplusplus
 }
 #endif

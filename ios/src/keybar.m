@@ -38,6 +38,7 @@
 #include "settingsview.h"
 #include "diskedit.h"
 #include "midiport.h"
+#include "clipboard.h"
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -1098,6 +1099,40 @@ static UIImage *slot_thumbnail(NSInteger slot)
 		action.state = settings_trackpad() ? UIMenuElementStateOn : UIMenuElementStateOff;
 		completion(@[ action ]);
 	}];
+	UIDeferredMenuElement *clipboard = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+		NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
+		[items addObject:[UIAction actionWithTitle:@"画面の文字をコピー" image:[UIImage systemImageNamed:@"doc.on.doc"]
+		                                identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			clipboard_copyscreen();
+		}]];
+		[items addObject:[UIAction actionWithTitle:@"画面の文字を選んでコピー…" image:[UIImage systemImageNamed:@"text.viewfinder"]
+		                                identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			clipboard_presentscreen([weakSelf hostController]);
+		}]];
+		if (clipboard_istyping()) {
+			UIAction *stop = [UIAction actionWithTitle:@"貼り付けを止める" image:[UIImage systemImageNamed:@"stop.circle"]
+			                                identifier:nil handler:^(UIAction *a) {
+				(void)a;
+				clipboard_stoptyping();
+			}];
+			stop.attributes = UIMenuElementAttributesDestructive;
+			[items addObject:stop];
+		}
+		else {
+			UIAction *paste = [UIAction actionWithTitle:@"貼り付け（キー入力）" image:[UIImage systemImageNamed:@"doc.on.clipboard"]
+			                                 identifier:nil handler:^(UIAction *a) {
+				(void)a;
+				clipboard_paste([weakSelf hostController]);
+			}];
+			paste.subtitle = @"英数字とカナを 1 文字ずつ打ちます";
+			[items addObject:paste];
+		}
+		UIMenu *menu = [UIMenu menuWithTitle:@"コピー・貼り付け" image:[UIImage systemImageNamed:@"doc.on.clipboard"]
+		                          identifier:nil options:0 children:items];
+		completion(@[ menu ]);
+	}];
 	UIAction *settings = [UIAction actionWithTitle:@"設定…" image:[UIImage systemImageNamed:@"gearshape"]
 	                                   identifier:nil handler:^(UIAction *action) {
 		(void)action;
@@ -1120,7 +1155,7 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	}];
 	return [UIMenu menuWithChildren:@[
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ profiles, slots, fdd, hdd, files ]],
-		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ capture, trackpad ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ capture, clipboard, trackpad ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, help, np2menu, reset ]],
 	]];
 }
@@ -1643,6 +1678,19 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	if ([command isEqualToString:@"!midiports"]) {
 		midiport_debugdump();
 	}
+	else if ([command isEqualToString:@"!copyscreen"]) {
+		clipboard_copyscreen();
+	}
+	else if ([command isEqualToString:@"!paste"]) {
+		/* puts debugpaste.txt (data directory) on the clipboard and types it without asking */
+		NSString *text = [NSString stringWithContentsOfFile:@"debugpaste.txt" encoding:NSUTF8StringEncoding error:nil];
+		[UIPasteboard generalPasteboard].string = text ?: @"";
+		NSLog(@"keybar: paste, %lu left out", (unsigned long)clipboard_type([UIPasteboard generalPasteboard].string ?: @""));
+	}
+	else if ([command isEqualToString:@"!pbdump"]) {
+		/* the clipboard's text -> pasteboard.txt */
+		[[UIPasteboard generalPasteboard].string ?: @"" writeToFile:@"pasteboard.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+	}
 	else if ([command hasPrefix:@"!insert"] && command.length > 9) {
 		insert_fdd((REG8)([command characterAtIndex:7] - '1'), [command substringFromIndex:9]);
 	}
@@ -1916,6 +1964,17 @@ static UIImage *slot_thumbnail(NSInteger slot)
 
 static NP2KeyBar *s_keybar;
 
+/* Command + C copies the text screen, Command + V types the clipboard. */
+static void command_key(char letter)
+{
+	if (letter == 'c') {
+		clipboard_copyscreen();
+	}
+	else if (letter == 'v' && !clipboard_istyping()) {
+		clipboard_paste([s_keybar hostController]);
+	}
+}
+
 static void refresh_modifiers(void)
 {
 	[s_keybar refreshModifiers];
@@ -1967,6 +2026,7 @@ void keybar_initialize(void)
 		s_keybar = [[NP2KeyBar alloc] initWithFrame:view.bounds];
 		[view addSubview:s_keybar];
 		keyinput_onchange = refresh_modifiers;
+		keyinput_oncommand = command_key;
 		lifecycle_start();
 		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 			settingsview_presentguideifneeded([s_keybar hostController]);

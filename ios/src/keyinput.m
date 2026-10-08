@@ -26,6 +26,7 @@
 #include <kbtrans.h>
 
 void (*keyinput_onchange)(void);
+void (*keyinput_oncommand)(char letter);
 
 typedef struct {
 	UINT8	normal;		/* PC-98 key (bit 7 = with SHIFT) for the unshifted US key */
@@ -189,6 +190,18 @@ static NP21_FILTERRESULT SDLCALL event_filter(void *userdata, SDL_Event *event)
 	(void)userdata;
 	if (event->type != NP21_EVENT_KEYDOWN && event->type != NP21_EVENT_KEYUP) {
 		return 1;
+	}
+	if (NP21_KEY_MOD(&event->key) & NP21_KMOD_GUI) {
+		SDL_Scancode sc = NP21_KEY_SCANCODE(&event->key);
+		if (sc == SDL_SCANCODE_C || sc == SDL_SCANCODE_V) {
+			if (event->type == NP21_EVENT_KEYDOWN && keyinput_oncommand) {
+				char letter = (sc == SDL_SCANCODE_C) ? 'c' : 'v';
+				dispatch_async(dispatch_get_main_queue(), ^{
+					keyinput_oncommand(letter);
+				});
+			}
+			return 0;
+		}
 	}
 	if (taskmng_handles(&event->key)) {
 		return 1;
