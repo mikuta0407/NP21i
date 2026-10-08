@@ -28,6 +28,7 @@
 #include "kbdview.h"
 #include "hinge.h"
 #include "trackpad.h"
+#include "gamepad.h"
 #include "lifecycle.h"
 #include "settings.h"
 #include "settingsview.h"
@@ -1225,7 +1226,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 
 - (void)debugCommand:(NSString *)command
 {
-	if (diskedit_debugcommand(command)) {
+	if (diskedit_debugcommand(command) || gamepad_debugcommand(command)) {
 		return;
 	}
 	if ([command hasPrefix:@"!insert"] && command.length > 9) {

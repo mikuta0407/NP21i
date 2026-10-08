@@ -519,6 +519,20 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
+	[sections addObject:section(@"ゲームコントローラ", @"十字キー（左スティック）と A / B ボタンの割り当てです。矢印キー・テンキーでは A が Z、B が X になります。ジョイスティック端子は、サウンドボード（PC-9801-26K / 86 など）のジョイスティック端子につないだものとして、トリガー 1 / 2 になります。ほかのボタンはいつも X がスペース、Y がリターン、L が SHIFT、R が CTRL、メニューが ESC、オプションが f·1 です。", @[
+		detail_row(@"十字キーと A / B", ^NSString *{
+			NSArray<NSString *> *labels = settings_gamepadmodes();
+			NSInteger index = settings_gamepadmode();
+			return (index >= 0 && index < (NSInteger)labels.count) ? labels[(NSUInteger)index] : @"";
+		}, ^(UIViewController *c) {
+			[c.navigationController pushViewController:choice_screen(@"十字キーと A / B", nil, settings_gamepadmodes(), ^NSInteger {
+				return settings_gamepadmode();
+			}, ^(NSInteger index) {
+				[defaults setInteger:index forKey:kSettingGamepad];
+			}) animated:YES];
+		}),
+	])];
+
 	[sections addObject:section(@"折りたたみ（iPhone Duo）", @"半分開くと、PC-98 キーボードが出ます。縦向き（ノートパソコンのような持ち方）では上半分が画面、下半分がキーボードです。横向き（本のような持ち方）での配置をここで選べます。", @[
 		detail_row(@"横向きで半分開いたとき", ^NSString *{
 			NSArray<NSString *> *labels = settings_landscapefolds();

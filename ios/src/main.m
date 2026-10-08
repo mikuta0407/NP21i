@@ -11,6 +11,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include "sdlcompat.h"
+#include "gamepad.h"
 #if USE_SDL >= 3
 #include <SDL3/SDL_main.h>
 #else
@@ -57,5 +58,6 @@ int main(int argc, char *argv[])
 	debugmidi_start();
 	debugkeys_start();
 	keybar_initialize();
+	gamepad_initialize();
 	return np2_main(argc, argv);
 }

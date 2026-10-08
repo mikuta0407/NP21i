@@ -1,0 +1,25 @@
+diff --git a/sdl/joymng.h b/sdl/joymng.h
+--- a/sdl/joymng.h
++++ b/sdl/joymng.h
+@@ -88,8 +88,21 @@
+ 
+ #else	/* !SUPPORT_JOYSTICK */
+ 
++#if defined(NP2_IOS_KEYBAR)
++/* The iOS layer's game controller (gamepad.m): the JOY_*_BIT bits of what
++ * is held are 0, both the trigger and its rapid bit for a trigger. */
++#ifdef __cplusplus
++extern "C" {
++#endif
++REG8 joymng_getstat(void);
++REG8 joymng_available(void);
++#ifdef __cplusplus
++}
++#endif
++#else
+ #define	joymng_getstat()		(REG8)0xff
+ #define	joymng_available()		(REG8)0
++#endif
+ 
+ // -- X11
+ #define	joymng_initialize()		(np2oscfg.JOYPAD1 |= 2)

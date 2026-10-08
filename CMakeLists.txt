@@ -178,6 +178,7 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/dpad.m
 	${IOS_DIR}/src/hinge.m
 	${IOS_DIR}/src/trackpad.m
+	${IOS_DIR}/src/gamepad.m
 	${IOS_DIR}/src/kbdlayout.m
 	${IOS_DIR}/src/kbdview.m
 	${IOS_DIR}/src/diskfs.c
