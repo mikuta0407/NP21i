@@ -819,6 +819,20 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
+	[sections addObject:section(@"画面", @"PC-98 の画面を拡大して表示するときの見え方です。くっきりはドットをそのまま大きくし、なめらかは輪郭をぼかし、ブラウン管風はさらに走査線を重ねます。", @[
+		detail_row(@"表示", ^NSString *{
+			NSArray<NSString *> *labels = settings_screenstyles();
+			NSInteger index = settings_screenstyle();
+			return (index >= 0 && index < (NSInteger)labels.count) ? labels[(NSUInteger)index] : @"";
+		}, ^(UIViewController *c) {
+			[c.navigationController pushViewController:choice_screen(@"表示", nil, settings_screenstyles(), ^NSInteger {
+				return settings_screenstyle();
+			}, ^(NSInteger index) {
+				[defaults setInteger:index forKey:kSettingScreenStyle];
+			}) animated:YES];
+		}),
+	])];
+
 	[sections addObject:section(@"マウス", @"オンにすると、画面をタッチパッドのように使います。指でなぞるとマウスが動き、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグです。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。≡ メニューからも切り替えられます。iPad にマウスやトラックパッドをつないだときは、ポインタをアプリの中に固定して、動かした分だけ PC-98 のマウスを動かします（NP2 メニューや設定を開いている間は固定しません）。画面を 2 本指でピンチすると拡大でき、拡大中は 2 本指でなぞると動かせます（≡ メニューの「拡大を戻す」か、縮めきると元に戻ります）。", @[
 		toggle_row(@"画面をタッチパッドにする", ^BOOL { return settings_trackpad(); }, ^(BOOL on) {
 			[defaults setBool:on forKey:kSettingTrackpad];

@@ -1,0 +1,56 @@
+diff --git a/sdl/scrnmng.c b/sdl/scrnmng.c
+--- a/sdl/scrnmng.c
++++ b/sdl/scrnmng.c
+@@ -61,6 +61,8 @@
+ /* Zoomed in (scrnmng_setzoom): the part of the screen shown, in its pixels. */
+ static float s_zoom = 1;
+ static float s_zoomx, s_zoomy;
++/* How the screen is scaled (scrnmng_setsmooth): -1 as SDL does by default. */
++static int s_smooth = -1;
+ 
+ /* The part shown of a w x h screen: all of it unless zoomed in. */
+ static void zoomrect(int w, int h, float *x, float *y, float *zw, float *zh)
+@@ -721,7 +723,16 @@
+ 		SDL_UpdateTexture(s_texture, NULL, scrnmng.dispsurf->pixels, scrnmng.dispsurf->pitch);
+ 	}
+ 	SDL_RenderClear(s_renderer);
++#if defined(NP2_IOS_KEYBAR)
++	if (s_smooth >= 0) {
+ #if USE_SDL >= 3
++		SDL_SetTextureScaleMode(s_texture, s_smooth ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_PIXELART);
++#else
++		SDL_SetTextureScaleMode(s_texture, s_smooth ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
++#endif
++	}
++#endif
++#if USE_SDL >= 3
+ 	if ((LOGICAL_PAD || LOGICAL_HPAD || ZOOMED) && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+ 		SDL_FRect dst = {(float)s_leftpad, (float)s_toppad, 0, 0};
+ 		SDL_FRect src;
+@@ -821,6 +832,14 @@
+ 	}
+ }
+ 
++void scrnmng_setsmooth(int smooth)
++{
++	if (smooth != s_smooth) {
++		s_smooth = smooth;
++		scrnmng_update();
++	}
++}
++
+ void scrnmng_setzoom(float zoom, float x, float y)
+ {
+ 	if (zoom != s_zoom || x != s_zoomx || y != s_zoomy) {
+diff --git a/sdl/scrnmng.h b/sdl/scrnmng.h
+--- a/sdl/scrnmng.h
++++ b/sdl/scrnmng.h
+@@ -104,6 +104,8 @@
+ /* Shows the screen zoom times larger, centered on (x, y) in its pixels as
+  * far as it can be; 1 shows all of it. Touches are mapped likewise. */
+ void scrnmng_setzoom(float zoom, float x, float y);
++/* 0: sharp pixels (pixel art scaling with SDL3), 1: smoothed. */
++void scrnmng_setsmooth(int smooth);
+ #endif
+ #if USE_SDL >= 3 || defined(NP2_IOS_KEYBAR)
+ void scrnmng_converttoscreen(SDL_Event *event);

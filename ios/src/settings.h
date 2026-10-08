@@ -27,6 +27,7 @@ extern NSString *const kSettingGamepad;			/* NP2GamepadMode (gamepad.h) */
 extern NSString *const kSettingGamepadMap;			/* button name -> PC-98 key code (gamepad.m) */
 extern NSString *const kSettingMouseLock;			/* BOOL: a connected mouse's pointer stays in the app */
 extern NSString *const kSettingPinchZoom;			/* BOOL: two fingers zoom the screen */
+extern NSString *const kSettingScreenStyle;		/* 0 sharp, 1 smooth, 2 smooth with scan lines */
 extern NSString *const kSettingTrackpad;			/* BOOL: touches on the screen are a trackpad's */
 extern NSString *const kSettingTrackpadSpeed;		/* % of a finger's travel, 100 = alike */
 
@@ -59,6 +60,8 @@ NSInteger settings_gamepadmode(void);
 NSArray<NSString *> *settings_gamepadmodes(void);
 BOOL settings_mouselock(void);
 BOOL settings_pinchzoom(void);
+NSInteger settings_screenstyle(void);
+NSArray<NSString *> *settings_screenstyles(void);
 BOOL settings_trackpad(void);
 /* The trackpad speed as a factor (1 = the pointer travels as the finger). */
 double settings_trackpadspeed(void);

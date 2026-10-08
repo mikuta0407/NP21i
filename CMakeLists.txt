@@ -182,6 +182,7 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/profile.m
 	${IOS_DIR}/src/capture.m
 	${IOS_DIR}/src/midirec.m
+	${IOS_DIR}/src/scanlines.m
 	${IOS_DIR}/src/kbdlayout.m
 	${IOS_DIR}/src/kbdview.m
 	${IOS_DIR}/src/diskfs.c

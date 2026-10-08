@@ -7,7 +7,7 @@
  * keyboard_layout        -> keyinput_setlayout() (0 = JIS, 1 = US; default JIS)
  * midi_clock_out         -> mpu98ii_midiclockout (NP2kai patch 0015)
  * run_in_background, resume_state -> lifecycle.m; show_speed_warning, screen_keyboard,
- * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape, mouse_lock, pinch_zoom -> keybar.m;
+ * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape, mouse_lock, pinch_zoom, screen_style -> keybar.m;
  * gamepad_mode, gamepad_map -> gamepad.m
  *
  * The environment variables NP2_MIDI_LATENCY_MS / NP2_MIDIIN_LATENCY_MS
@@ -45,6 +45,7 @@ NSString *const kSettingGamepad = @"gamepad_mode";
 NSString *const kSettingGamepadMap = @"gamepad_map";
 NSString *const kSettingMouseLock = @"mouse_lock";
 NSString *const kSettingPinchZoom = @"pinch_zoom";
+NSString *const kSettingScreenStyle = @"screen_style";
 NSString *const kSettingTrackpad = @"trackpad_mouse";
 NSString *const kSettingTrackpadSpeed = @"trackpad_speed";
 
@@ -134,6 +135,16 @@ BOOL settings_mouselock(void)
 BOOL settings_pinchzoom(void)
 {
 	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingPinchZoom];
+}
+
+NSInteger settings_screenstyle(void)
+{
+	return [[NSUserDefaults standardUserDefaults] integerForKey:kSettingScreenStyle];
+}
+
+NSArray<NSString *> *settings_screenstyles(void)
+{
+	return @[ @"くっきり（ドット）", @"なめらか", @"ブラウン管風（走査線）" ];
 }
 
 BOOL settings_trackpad(void)

@@ -31,6 +31,7 @@
 #include "gamepad.h"
 #include "profile.h"
 #include "capture.h"
+#include "scanlines.h"
 #include "midirec.h"
 #include "lifecycle.h"
 #include "settings.h"
@@ -257,6 +258,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	UIButton *_dpadButton;
 	NP2DPad *_dpad;
 	NP2TrackpadView *_trackpad;	/* under everything, over SDL's view */
+	NP2ScanlineView *_scanlines;	/* over the PC-98 screen (CRT look) */
 	BOOL _pointerLocked;		/* a connected mouse moves the PC-98 mouse by travel */
 	UIButton *_recordButton;	/* shown while recording (video, MIDI): stops it */
 	CGRect _screenRect;			/* where the PC-98 screen is, unzoomed */
@@ -293,6 +295,9 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	_trackpad.hidden = !settings_trackpad();
 	_trackpad.speed = settings_trackpadspeed();
 	[self addSubview:_trackpad];
+	_scanlines = [[NP2ScanlineView alloc] initWithFrame:CGRectZero];
+	[self addSubview:_scanlines];
+	[self applyScreenStyle];
 
 	_bar = [[UIView alloc] init];
 	_bar.backgroundColor = [UIColor colorWithWhite:0.10 alpha:0.92];
@@ -723,6 +728,23 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	_screenRect = rect;
 	_pixelScale = scale;
 	_trackpad.pointsPerPixel = scale * _zoom;
+	[self updateScanlines];
+}
+
+/* Sharp pixels, smoothed, or smoothed with scan lines (settings). */
+- (void)applyScreenStyle
+{
+	NSInteger style = settings_screenstyle();
+	scrnmng_setsmooth(style != 0);
+	_scanlines.hidden = (style != 2);
+}
+
+- (void)updateScanlines
+{
+	_scanlines.frame = _screenRect;
+	CGFloat lines = _screenSize.height / MAX(_zoom, 1);
+	CGFloat top = MIN(MAX(_zoomCenter.y - lines / 2, 0), _screenSize.height - lines);
+	[_scanlines setLines:lines firstLineOffset:(_zoom > 1) ? top - floor(top) : 0];
 }
 
 - (void)setZoom:(CGFloat)zoom center:(CGPoint)center
@@ -740,6 +762,7 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	_zoomCenter = center;
 	scrnmng_setzoom((float)zoom, (float)center.x, (float)center.y);
 	_trackpad.pointsPerPixel = _pixelScale * _zoom;
+	[self updateScanlines];
 }
 
 /* The PC-98 pixel at a point of the screen now, and where along it that is. */
@@ -970,6 +993,7 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	_trackpad.hidden = !settings_trackpad();
 	_trackpad.speed = settings_trackpadspeed();
 	[self setNeedsLayout];		/* the layout when folded */
+	[self applyScreenStyle];
 	_screenKeyboard.hapticFeedback = settings_keyhaptics();
 	_screenKeyboard.keyPreview = settings_keypreview();
 	if (!settings_pinchzoom() && _zoom > 1) {
@@ -1643,6 +1667,9 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	}
 	else if ([command isEqualToString:@"!settings"]) {
 		settingsview_present([self hostController]);
+	}
+	else if ([command hasPrefix:@"!style:"]) {
+		[[NSUserDefaults standardUserDefaults] setInteger:[command substringFromIndex:7].integerValue forKey:kSettingScreenStyle];
 	}
 	else if ([command isEqualToString:@"!profiles"]) {
 		settingsview_presentprofiles([self hostController]);
