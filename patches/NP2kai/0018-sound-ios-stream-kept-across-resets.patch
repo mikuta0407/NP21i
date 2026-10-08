@@ -1,0 +1,43 @@
+diff --git a/sound/sound.c b/sound/sound.c
+index d8ce8f2..303c2e7 100755
+--- a/sound/sound.c
++++ b/sound/sound.c
+@@ -49,6 +49,10 @@ static void streamreset(void) {
+ 	SNDCSEC_LEAVE;
+ }
+ 
++#if defined(NP2_IOS_KEYBAR)
++void (SOUNDCALL *sound_iosstream)(SINT32 *pcm, UINT count);
++#endif
++
+ static void streamprepare(UINT samples) {
+ 
+ 	CBTBL	*cb;
+@@ -62,6 +66,11 @@ static void streamprepare(UINT samples) {
+ 			cb->cbfn(cb->hdl, sndstream.ptr, count);
+ 			cb++;
+ 		}
++#if defined(NP2_IOS_KEYBAR)
++		if (sound_iosstream) {
++			sound_iosstream(sndstream.ptr, count);
++		}
++#endif
+ 		sndstream.ptr += count * 2;
+ 		sndstream.remain -= count;
+ 	}
+diff --git a/sound/sound.h b/sound/sound.h
+index 6cda71b..d5a7e84 100755
+--- a/sound/sound.h
++++ b/sound/sound.h
+@@ -35,6 +35,11 @@ void sound_destroy(void);
+ void sound_reset(void);
+ void sound_changeclock(void);
+ void sound_streamregist(void *hdl, SOUNDCB cbfn);
++#if defined(NP2_IOS_KEYBAR)
++/* Adds to every block of sound like a stream (stereo, 16-bit levels), but
++ * stays set across resets, which clear the streams; on the emulator's thread. */
++extern void (SOUNDCALL *sound_iosstream)(SINT32 *pcm, UINT count);
++#endif
+ 
+ void sound_sync(void);
+ 

@@ -26,6 +26,7 @@
 #include "cmmidi.h"
 #include "midiport.h"
 #include "midirec.h"
+#include "synth.h"
 #include <common/mimpidef.h>
 #include <sound/sound.h>
 
@@ -128,6 +129,11 @@ struct _cmmidi {
 	MIDIPORTIN	hmidiin;
 	MIDIPORTOUT	hmidiout;
 	MIDIHDL		vermouth;
+
+	/* the output selection (live, in the config): "SYNTH" plays the
+	 * built-in synth (synth.h), which can be chosen while running */
+	const char	*outsel;
+	BOOL		synthon;
 
 	/* emulated time -> host time mapping for output timestamps */
 	UINT32		lastclock;
@@ -330,11 +336,17 @@ module2number(const char *module)
 	return MIDI_OTHER;
 }
 
+static BOOL update_synth(CMMIDI midi);
+
 static void
 sendexclusive(CMMIDI midi, const UINT8 *buf, UINT leng)
 {
 
 	if (midi->opened & CMMIDI_MIDIOUT) {
+		if (update_synth(midi)) {
+			sound_sync();
+			synth_sysex(buf, leng);
+		}
 		midi_send(midi, buf, leng);
 	}
 #if defined(VERMOUTH_LIB)
@@ -351,6 +363,24 @@ midiout_none(CMMIDI midi, UINT32 msg, UINT cnt)
 	/* Nothing to do */
 }
 
+/* Opens or closes the built-in synth as the output selection says now. */
+static BOOL
+update_synth(CMMIDI midi)
+{
+	BOOL want = midi->outsel && !milstr_cmp(midi->outsel, cmmidi_synth);
+
+	if (want != midi->synthon) {
+		midi->synthon = want;
+		if (want) {
+			synth_open();
+		}
+		else {
+			synth_close();
+		}
+	}
+	return want;
+}
+
 static void
 midiout_device(CMMIDI midi, UINT32 msg, UINT cnt)
 {
@@ -360,6 +390,11 @@ midiout_device(CMMIDI midi, UINT32 msg, UINT cnt)
 	for (i = 0; i < cnt; i++, msg >>= 8) {
 		buf[i] = msg & 0xff;
 	}
+	if (update_synth(midi)) {
+		sound_sync();	/* the sound until now, then the message */
+		synth_shortmsg(buf, cnt);
+	}
+	/* the virtual port and the MIDI recording get it in any case */
 	midi_send(midi, buf, cnt);
 }
 
@@ -771,6 +806,9 @@ midirelease(COMMNG self)
 	if (midi->opened & CMMIDI_MIDIOUT) {
 		midiport_closeout(midi->hmidiout);
 	}
+	if (midi->synthon) {
+		synth_close();
+	}
 #if defined(VERMOUTH_LIB)
 	if (midi->opened & CMMIDI_VERMOUTH) {
 		midiout_destroy(midi->vermouth);
@@ -866,6 +904,7 @@ cmmidi_create(const UINT device, const char *midiout, const char *midiin, const 
 	midi->midictrl = MIDICTRL_READY;
 	midi->hmidiin = hmidiin;
 	midi->hmidiout = hmidiout;
+	midi->outsel = midiout;
 #if defined(VERMOUTH_LIB)
 	midi->vermouth = vermouth;
 	if (opened & CMMIDI_VERMOUTH) {
@@ -893,6 +932,7 @@ cmmidi_allnotesoff(void)
 	UINT i;
 	UINT8 msg[3];
 
+	synth_allnotesoff();
 	for (i = 0; i < NELEMENTS(s_instances); i++) {
 		CMMIDI midi = s_instances[i];
 		if (midi == NULL || !(midi->opened & CMMIDI_MIDIOUT)) {

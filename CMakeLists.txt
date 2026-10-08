@@ -178,6 +178,7 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/clipboard.m
 	${IOS_DIR}/src/openurl.m
 	${IOS_DIR}/src/extdisplay.m
+	${IOS_DIR}/src/synth.m
 	${IOS_DIR}/src/cmmidi.c
 	${IOS_DIR}/src/dpad.m
 	${IOS_DIR}/src/hinge.m
@@ -244,7 +245,7 @@ target_compile_options(NP21iOS PRIVATE
 # which makes the main loop run frames in bursts and ruins MIDI timing.
 set_source_files_properties(${NP2_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-everything;-O2")
 
-target_link_libraries(NP21iOS PRIVATE ${SDL_LIBRARIES} "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers" "-framework CoreAudioKit"
+target_link_libraries(NP21iOS PRIVATE ${SDL_LIBRARIES} "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers" "-framework CoreAudioKit" "-framework AudioToolbox"
 	"-framework AVFoundation" "-framework CoreMedia" "-framework CoreVideo")
 
 # Settings app entries (copied as a folder; CodeSign runs after this step).

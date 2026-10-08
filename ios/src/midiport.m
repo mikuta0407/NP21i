@@ -98,7 +98,7 @@ static BOOL is_virtual(MIDIEndpointRef ep)
 
 static BOOL is_nc(const char *selection)
 {
-	return selection != NULL && milstr_cmp(selection, MIDIPORT_NC) == 0;
+	return selection != NULL && (milstr_cmp(selection, MIDIPORT_NC) == 0 || milstr_cmp(selection, MIDIPORT_SYNTH) == 0);
 }
 
 static void resolve_out(MIDIPORTOUT out)

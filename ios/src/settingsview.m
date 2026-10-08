@@ -13,6 +13,7 @@
 #include "keyinput.h"
 #include "keybar.h"
 #include "midiport.h"
+#include "synth.h"
 #include "diskedit.h"
 #include "lifecycle.h"
 #include "profile.h"
@@ -298,6 +299,9 @@ static NSString *port_label(const char *selection)
 	if (milstr_cmp(selection, MIDIPORT_NC) == 0) {
 		return @"なし";
 	}
+	if (milstr_cmp(selection, MIDIPORT_SYNTH) == 0) {
+		return @"内蔵音源";
+	}
 	return [NSString stringWithUTF8String:selection];
 }
 
@@ -306,12 +310,15 @@ static NSString *port_label(const char *selection)
 static UIViewController *port_screen(NSString *title, BOOL sources, char *selection, size_t size, NSString *virtualName)
 {
 	NSMutableArray<NSString *> *values = [NSMutableArray arrayWithObjects:kAllPorts, kNoPort, nil];
+	if (!sources) {
+		[values insertObject:@MIDIPORT_SYNTH atIndex:1];
+	}
 	midiport_list(sources, ^(const char *name) {
 		[values addObject:[NSString stringWithUTF8String:name]];
 	});
 	NSString *current = [NSString stringWithUTF8String:selection];
 	if (current.length && ![current isEqualToString:kAllPorts] && ![current isEqualToString:kNoPort] &&
-	    ![values containsObject:current]) {
+	    ![current isEqualToString:@MIDIPORT_SYNTH] && ![values containsObject:current]) {
 		[values addObject:current];
 	}
 	NSMutableArray<NSString *> *labels = [NSMutableArray array];
@@ -320,7 +327,7 @@ static UIViewController *port_screen(NSString *title, BOOL sources, char *select
 	}
 	NSString *footer = sources
 		? [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器から受け取ります。他のアプリからは「NP21 MIDI IN%@」に送れます。", virtualName]
-		: [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器に送ります。他のアプリは「NP21 MIDI OUT%@」から受け取れます。", virtualName];
+		: [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器に送ります。「内蔵音源」はアプリの中の音源（SoundFont）で鳴らします。他のアプリは、どれを選んでも「NP21 MIDI OUT%@」から受け取れます。", virtualName];
 	return choice_screen(title, footer, labels, ^NSInteger {
 		NSString *now = [NSString stringWithUTF8String:selection];
 		NSUInteger index = [values indexOfObject:now.length ? now : kAllPorts];
@@ -383,6 +390,84 @@ static void open_files_app(void)
 	NSURL *url = [NSURL URLWithString:[@"shareddocuments://" stringByAppendingString:
 		[path stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet]]];
 	[UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
+}
+
+// ---- built-in synth
+
+@interface NP2BankPicker : NSObject <UIDocumentPickerDelegate>
+@property (nonatomic, copy) void (^done)(void);
+@end
+
+@implementation NP2BankPicker
+
+/* Copies the picked banks into soundfont/ and chooses the first. */
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
+{
+	(void)controller;
+	NSFileManager *fm = [NSFileManager defaultManager];
+	[fm createDirectoryAtPath:synth_bankdir() withIntermediateDirectories:YES attributes:nil error:nil];
+	NSString *first = nil;
+	for (NSURL *url in urls) {
+		BOOL scoped = [url startAccessingSecurityScopedResource];
+		NSString *dest = [synth_bankdir() stringByAppendingPathComponent:url.lastPathComponent];
+		[fm removeItemAtPath:dest error:nil];
+		if ([fm copyItemAtPath:url.path toPath:dest error:nil] && first == nil) {
+			first = url.lastPathComponent;
+		}
+		if (scoped) {
+			[url stopAccessingSecurityScopedResource];
+		}
+	}
+	if (first) {
+		[[NSUserDefaults standardUserDefaults] setObject:first forKey:kSettingSynthBank];
+	}
+	if (self.done) {
+		self.done();
+	}
+}
+
+@end
+
+static NP2BankPicker *s_bankpicker;
+
+static UIViewController *bank_screen(void)
+{
+	__block __weak NP2TableViewController *weakScreen = nil;
+	NP2TableViewController *screen = [[NP2TableViewController alloc] initWithTitle:@"内蔵音源の音色" build:^NSArray<NP2Section *> *{
+		NSMutableArray<NP2Row *> *rows = [NSMutableArray array];
+		NSString *current = synth_bank();
+		for (NSString *bank in synth_banks()) {
+			NP2Row *row = [NP2Row new];
+			row.kind = RowKindChoice;
+			row.title = bank;
+			row.isOn = ^BOOL { return [bank isEqualToString:current]; };
+			row.action = ^(UIViewController *controller) {
+				(void)controller;
+				[[NSUserDefaults standardUserDefaults] setObject:bank forKey:kSettingSynthBank];
+				[weakScreen reload];
+			};
+			[rows addObject:row];
+		}
+		NSString *footer = [NSString stringWithFormat:@"%@ にある SoundFont（.sf2）か DLS（.dls）の音色ファイルで鳴らします。iOS には General MIDI の音色が入っていないので、お持ちのものか、配布されているもの（GeneralUser GS など、GS 配列のもの）を追加してください。",
+		                    data_dir_hint(synth_bankdir())];
+		return @[
+			section(nil, rows.count ? footer : [@"音色ファイルがありません。" stringByAppendingString:footer], rows),
+			section(nil, nil, @[ button_row(@"ファイルを追加…", ^(UIViewController *c) {
+				UTType *sf2 = [UTType typeWithFilenameExtension:@"sf2"] ?: UTTypeData;
+				UTType *dls = [UTType typeWithFilenameExtension:@"dls"] ?: UTTypeData;
+				UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[ sf2, dls, UTTypeData ] asCopy:YES];
+				picker.allowsMultipleSelection = YES;
+				s_bankpicker = [NP2BankPicker new];
+				s_bankpicker.done = ^{
+					[weakScreen reload];
+				};
+				picker.delegate = s_bankpicker;
+				[c presentViewController:picker animated:YES completion:nil];
+			}) ]),
+		];
+	}];
+	weakScreen = screen;
+	return screen;
 }
 
 // ---- new disk images
@@ -578,6 +663,7 @@ static UIViewController *help_screen(void)
 			]),
 			topic(@"MIDI", @[
 				@"設定 →「MIDI」で出力先と入力元を選びます。Bluetooth MIDI 機器もそこで接続できます。",
+				@"MIDI 機器がなくても、出力先を「内蔵音源」にするとアプリの中で鳴ります。音色ファイル（SoundFont .sf2 / DLS .dls、GS 配列のものがおすすめ）を 設定 →「内蔵音源」で追加してください。ファイル App から NP21 で開いても追加できます。",
 				@"「MIDI クロックを送る」をオンにすると、外部の機材や DAW がソフトのテンポに合わせて動きます。",
 			]),
 			topic(@"iPhone Duo", @[
@@ -869,6 +955,19 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 		detail_row(@"入力の遅延", ^NSString *{ return ms_label(kSettingMidiInputLatency); }, ^(UIViewController *c) {
 			[c.navigationController pushViewController:latency_screen(@"入力の遅延", kSettingMidiInputLatency, @[ @0, @20, @30, @50 ], 20) animated:YES];
+		}),
+	])];
+
+	[sections addObject:section(@"内蔵音源", @"MIDI の出力先を「内蔵音源」にすると、外部の MIDI 機器なしで、アプリの中で鳴らします（PC-98 のほかの音と一緒に録音もできます）。音色は SoundFont（.sf2）か DLS（.dls）のファイルを追加して選びます。", @[
+		detail_row(@"音色", ^NSString *{ return synth_bank() ?: @"なし"; }, ^(UIViewController *c) {
+			[c.navigationController pushViewController:bank_screen() animated:YES];
+		}),
+		slider_row(@"音量", 0, 128, ^float {
+			NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+			return [d objectForKey:kSettingSynthVolume] ? (float)[d integerForKey:kSettingSynthVolume] : 100;
+		}, ^(float v, BOOL done) {
+			(void)done;
+			[[NSUserDefaults standardUserDefaults] setInteger:lroundf(v) forKey:kSettingSynthVolume];
 		}),
 	])];
 

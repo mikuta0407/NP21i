@@ -19,6 +19,7 @@
 #include "settings.h"
 #include "keyinput.h"
 #include "kbdlayout.h"
+#include "synth.h"
 #include <sysmng.h>
 #include <pccore.h>
 #include <nevent.h>
@@ -82,6 +83,7 @@ static void apply_settings(void)
 	apply_ms(&cmmidi_latency_ms, read_ms(kSettingMidiOutputLatency, "NP2_MIDI_LATENCY_MS"), "MIDI output latency");
 	apply_ms(&cmmidi_midiin_latency_ms, read_ms(kSettingMidiInputLatency, "NP2_MIDIIN_LATENCY_MS"), "MIDI input latency");
 	mpu98ii_midiclockout = [[NSUserDefaults standardUserDefaults] boolForKey:kSettingMidiClockOut] ? 1 : 0;
+	synth_settingschanged();
 	UINT8 master = (UINT8)MIN(MAX([[NSUserDefaults standardUserDefaults] integerForKey:kSettingVolumeMaster], 0), 100);
 	if (master != np2cfg.vol_master) {
 		np2cfg.vol_master = master;

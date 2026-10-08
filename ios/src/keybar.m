@@ -41,6 +41,7 @@
 #include "clipboard.h"
 #include "openurl.h"
 #include "extdisplay.h"
+#include "synth.h"
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -57,6 +58,7 @@
 #include <embed/vramhdl.h>
 #include <embed/menubase/menubase.h>
 #include <statsave.h>
+#include <np2.h>
 
 enum {
 	SCREEN_WIDTH	= 640,
@@ -1398,7 +1400,7 @@ static NP2FileKind file_kind(NSString *name)
 	BOOL fromInbox = [path hasPrefix:inbox];
 
 	void (^use)(NSString *, void (^)(NSString *)) = ^(NSString *dir, void (^handler)(NSString *)) {
-		if (inPlace && ![dir isEqualToString:host_dir()]) {
+		if (inPlace && ![dir isEqualToString:host_dir()] && ![dir isEqualToString:synth_bankdir()]) {
 			handler(inPlace);
 			return;
 		}
@@ -1409,6 +1411,18 @@ static NP2FileKind file_kind(NSString *name)
 			handler(copied);
 		}];
 	};
+
+	if (synth_isbank(name)) {
+		/* a SoundFont / DLS bank: the built-in synth's sounds */
+		use(synth_bankdir(), ^(NSString *copied) {
+			[[NSUserDefaults standardUserDefaults] setObject:copied.lastPathComponent forKey:kSettingSynthBank];
+			BOOL used = !milstr_cmp(np2oscfg.mpu.mout, MIDIPORT_SYNTH);
+			[weakSelf showMessage:@"内蔵音源の音色にしました"
+			               detail:used ? copied.lastPathComponent
+			                           : [NSString stringWithFormat:@"%@\n設定 →「MIDI」の出力先を「内蔵音源」にすると、この音色で鳴ります。", copied.lastPathComponent]];
+		});
+		return;
+	}
 
 	NSString *message = nil;
 	if (kind == NP2FileKindFloppy) {

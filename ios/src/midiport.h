@@ -5,6 +5,7 @@
  * Endpoint selection strings (np21kai.cfg: mpu98map / mpu98min etc.):
  *   "" or "*"   all hardware/network endpoints
  *   "N/C"       no hardware/network endpoint (the virtual ones below still work)
+ *   "SYNTH"     the same here; cmmidi.c plays the built-in synth
  *   otherwise   endpoints whose display name contains the string (case-insensitive)
  *
  * The selection string is kept by pointer (it lives in the config) and is
@@ -27,6 +28,7 @@ extern "C" {
 
 #define MIDIPORT_ALL		"*"
 #define MIDIPORT_NC			"N/C"
+#define MIDIPORT_SYNTH		"SYNTH"		/* the built-in synth (synth.h): no device, as "N/C" */
 
 enum {
 	MIDIPORT_VIRTUALS	= 2		/* virtual endpoint pairs: the main port and S-MPU's B */
