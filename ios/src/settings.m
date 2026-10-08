@@ -5,6 +5,7 @@
  * midi_output_latency_ms -> cmmidi_latency_ms (default 20, 0 = send immediately)
  * midi_input_latency_ms  -> cmmidi_midiin_latency_ms (default 20, 0 = deliver immediately)
  * keyboard_layout        -> keyinput_setlayout() (0 = JIS, 1 = US; default JIS)
+ * midi_clock_out         -> mpu98ii_midiclockout (NP2kai patch 0015)
  * run_in_background, resume_state -> lifecycle.m; show_speed_warning, screen_keyboard,
  * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape, mouse_lock, pinch_zoom -> keybar.m;
  * gamepad_mode, gamepad_map -> gamepad.m
@@ -18,6 +19,9 @@
 #include "keyinput.h"
 #include "kbdlayout.h"
 #include <sysmng.h>
+#include <pccore.h>
+#include <nevent.h>
+#include <cbus/mpu98ii.h>
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -27,6 +31,7 @@ extern UINT cmmidi_midiin_latency_ms;
 
 NSString *const kSettingMidiOutputLatency = @"midi_output_latency_ms";
 NSString *const kSettingMidiInputLatency = @"midi_input_latency_ms";
+NSString *const kSettingMidiClockOut = @"midi_clock_out";
 NSString *const kSettingKeyboardLayout = @"keyboard_layout";
 NSString *const kSettingRunInBackground = @"run_in_background";
 NSString *const kSettingResume = @"resume_state";
@@ -65,6 +70,7 @@ static void apply_settings(void)
 {
 	apply_ms(&cmmidi_latency_ms, read_ms(kSettingMidiOutputLatency, "NP2_MIDI_LATENCY_MS"), "MIDI output latency");
 	apply_ms(&cmmidi_midiin_latency_ms, read_ms(kSettingMidiInputLatency, "NP2_MIDIIN_LATENCY_MS"), "MIDI input latency");
+	mpu98ii_midiclockout = [[NSUserDefaults standardUserDefaults] boolForKey:kSettingMidiClockOut] ? 1 : 0;
 
 	static int layout = -1;
 	int newlayout = (int)[[NSUserDefaults standardUserDefaults] integerForKey:kSettingKeyboardLayout];

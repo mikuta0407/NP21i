@@ -730,7 +730,7 @@ static NSArray<NP2Section *> *settings_sections(void)
 	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 	NSMutableArray<NP2Section *> *sections = [NSMutableArray array];
 
-	[sections addObject:section(@"MIDI", @"MPU-PC98II の接続先です。Bluetooth MIDI 機器は「Bluetooth MIDI 機器」で接続すると一覧に出ます。", @[
+	[sections addObject:section(@"MIDI", @"MPU-PC98II の接続先です。Bluetooth MIDI 機器は「Bluetooth MIDI 機器」で接続すると一覧に出ます。「MIDI クロックを送る」をオンにすると、ソフトが演奏を始めたときにスタートとクロック（1 拍 24 回）を出し、外部のシーケンサーやリズムマシン、DAW をテンポに合わせて動かせます。逆に外部のクロックに合わせるときは、ソフト側の同期を MIDI にします（レコンポーザの SYNC MODE: MIDI）。", @[
 		detail_row(@"出力先", ^NSString *{ return port_label(np2oscfg.mpu.mout); }, ^(UIViewController *c) {
 			[c.navigationController pushViewController:port_screen(@"出力先", NO, np2oscfg.mpu.mout, sizeof(np2oscfg.mpu.mout)) animated:YES];
 		}),
@@ -739,6 +739,9 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 		detail_row(@"Bluetooth MIDI 機器", nil, ^(UIViewController *c) {
 			[c.navigationController pushViewController:[CABTMIDICentralViewController new] animated:YES];
+		}),
+		toggle_row(@"MIDI クロックを送る", ^BOOL { return [defaults boolForKey:kSettingMidiClockOut]; }, ^(BOOL on) {
+			[defaults setBool:on forKey:kSettingMidiClockOut];
 		}),
 		detail_row(@"出力の遅延", ^NSString *{ return ms_label(kSettingMidiOutputLatency); }, ^(UIViewController *c) {
 			[c.navigationController pushViewController:latency_screen(@"出力の遅延", kSettingMidiOutputLatency, @[ @0, @10, @20, @30, @50 ], 20) animated:YES];

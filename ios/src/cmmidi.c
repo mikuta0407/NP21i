@@ -31,6 +31,9 @@
 
 #include <cpucore.h>
 #include <pccore.h>
+#include <pccore.h>
+#include <nevent.h>
+#include <cbus/mpu98ii.h>
 #include <mach/mach_time.h>
 
 #include "sound/vermouth/vermouth.h"
@@ -531,6 +534,12 @@ midiwrite(COMMNG self, UINT8 data)
 	case MIDI_START:
 	case MIDI_CONTINUE:
 	case MIDI_STOP:
+		/* the MPU's clock (NP2kai patch 0015), when turned on */
+		if (mpu98ii_midiclockout && (midi->opened & CMMIDI_MIDIOUT)) {
+			midi_send(midi, &data, 1);
+		}
+		return 1;
+
 	case MIDI_ACTIVESENSE:
 	case MIDI_SYSTEMRESET:
 		return 1;

@@ -1,0 +1,142 @@
+diff --git a/cbus/mpu98ii.c b/cbus/mpu98ii.c
+--- a/cbus/mpu98ii.c
++++ b/cbus/mpu98ii.c
+@@ -30,6 +30,9 @@
+ #endif	/* 1 */
+ 
+ enum {
++	MIDI_TIMING			= 0xf8,
++	MIDI_START			= 0xfa,
++	MIDI_CONTINUE		= 0xfb,
+ 	MIDI_STOP			= 0xfc,
+ 
+ 	MIDIIN_AVAIL		= 0x80,
+@@ -132,6 +135,30 @@
+ static int mpu98_writecounter = 0;
+ 
+ 
++/* MIDI clock (MPU-401): with mpu98ii_midiclockout set, a play started with
++ * MIDI Start sends FA (FB to continue) and then F8 24 times a beat from the
++ * internal clock, and FC when stopped. With Clock Sync / MIDI (82), play
++ * steps follow the F8 received instead of the internal clock. Kept out of
++ * _MPU98II, which states are saved with. */
++int mpu98ii_midiclockout;
++static BOOL s_clockrunning;		/* MIDI Start or Continue sent, not Stop */
++static UINT s_clockticks;		/* internal ticks since the last F8 */
++
++static UINT ticksperclock(void) {
++
++	if (mpu98.flag2 & MPUFLAG2_FSKRESO) {
++		return 1;
++	}
++	return mpu98.inttimebase ? mpu98.inttimebase : 1;
++}
++
++static void sendrealtime(REG8 data) {
++
++	if (mpu98ii_midiclockout && cm_mpu98) {
++		cm_mpu98->write(cm_mpu98, data);
++	}
++}
++
+ static void makeintclock(void) {
+ 
+ 	UINT32	l;
+@@ -179,6 +206,7 @@
+ 	ZeroMemory(&mpu98.cond, sizeof(mpu98.cond));
+ 
+ 	mpu98.syncmode = MPUSYNCMODE_INT;
++	s_clockrunning = FALSE;
+ 	mpu98.metromode = MPUMETROMODE_OFF;
+ 	mpu98.flag1 = MPUFLAG1_THRU | MPUFLAG1_SENDME;
+ 	mpu98.flag2 = MPUFLAG2_RTAFF;
+@@ -365,7 +393,11 @@
+ 			mpu98ii_int();
+ 		}
+ 	}
+-	if (mpu98.flag1 & MPUFLAG1_PLAY) {
++	if ((mpu98.flag1 & MPUFLAG1_PLAY) && mpu98.syncmode != MPUSYNCMODE_MIDI) {
++		if (s_clockrunning && ++s_clockticks >= ticksperclock()) {
++			s_clockticks = 0;
++			sendrealtime(MIDI_TIMING);
++		}
+ 		if (!mpu98.remainstep++) {
+ 			tr_step();
+ 			mpu98.intphase = 1;
+@@ -375,6 +407,23 @@
+ 	(void)item;
+ }
+ 
++/* A clock received in MIDI sync: a clock's worth of play steps. */
++static void midiclockstep(void) {
++
++	UINT	i;
++
++	if (!(mpu98.flag1 & MPUFLAG1_PLAY)) {
++		return;
++	}
++	for (i=0; i<ticksperclock(); i++) {
++		if (!mpu98.remainstep++) {
++			tr_step();
++			mpu98.intphase = 1;
++			tr_nextsearch();
++		}
++	}
++}
++
+ void midiwaitout(NEVENTITEM item) {
+ 
+ 	//	TRACE_("midi ready", 0);
+@@ -428,14 +477,23 @@
+ static REG8 mpucmd_md(REG8 cmd) {			// 00-2F: Mode
+ 
+ 	TRACEOUT(("mpucmd_md %.2x", cmd));
+-#if 0
+ 	switch((cmd >> 0) & 3) {
+ 		case 1:								// MIDI Stop
++			if (s_clockrunning) {
++				sendrealtime(MIDI_STOP);
++			}
++			s_clockrunning = FALSE;
++			break;
++
+ 		case 2:								// MIDI Start
+ 		case 3:								// MIDI Cont
++			if (mpu98.syncmode != MPUSYNCMODE_MIDI) {
++				sendrealtime((cmd & 1) ? MIDI_CONTINUE : MIDI_START);
++				s_clockrunning = TRUE;
++				s_clockticks = ticksperclock() - 1;		/* F8 at the first tick */
++			}
+ 			break;
+ 	}
+-#endif
+ 	switch((cmd >> 2) & 3) {
+ 		case 1:								// Stop Play
+ 			mpu98.flag1 &= ~MPUFLAG1_PLAY;
+@@ -1258,6 +1316,13 @@
+ 			 || (np2cfg.asynccpu)
+ #endif
+ 			)) {
++			if (mpu98.syncmode == MPUSYNCMODE_MIDI && data >= MIDI_TIMING) {
++				/* real time messages drive the play; not for the host */
++				if (data == MIDI_TIMING) {
++					midiclockstep();
++				}
++				continue;
++			}
+ 			if (!mpu98.r.cnt) {
+ 				mpu98ii_int();
+ 			}
+diff --git a/cbus/mpu98ii.h b/cbus/mpu98ii.h
+--- a/cbus/mpu98ii.h
++++ b/cbus/mpu98ii.h
+@@ -104,6 +104,9 @@
+ 
+ void mpu98ii_changeclock(void);
+ 
++/* Nonzero: MIDI Start / Continue / Stop and clocks are sent out (MPU-401). */
++extern int mpu98ii_midiclockout;
++
+ void IOOUTCALL mpu98ii_o0(UINT port, REG8 dat);
+ void IOOUTCALL mpu98ii_o2(UINT port, REG8 dat);
+ REG8 IOINPCALL mpu98ii_i0(UINT port);

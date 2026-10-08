@@ -1743,6 +1743,9 @@ static UIImage *slot_thumbnail(NSInteger slot)
 			NSLog(@"keybar: unknown command %@", command);
 		}
 	}
+	else if ([command hasPrefix:@"!midiclock:"]) {
+		[[NSUserDefaults standardUserDefaults] setBool:[command hasSuffix:@"on"] forKey:kSettingMidiClockOut];
+	}
 	else if ([command isEqualToString:@"!shot"]) {
 		capture_screenshot([self hostController]);
 	}

@@ -13,6 +13,7 @@
 
 extern NSString *const kSettingMidiOutputLatency;	/* ms, 0 = immediately */
 extern NSString *const kSettingMidiInputLatency;	/* ms, 0 = immediately */
+extern NSString *const kSettingMidiClockOut;		/* BOOL: MIDI Start / Stop and clocks are sent out */
 extern NSString *const kSettingKeyboardLayout;		/* KEYLAYOUT_JIS / KEYLAYOUT_US */
 extern NSString *const kSettingRunInBackground;		/* BOOL */
 extern NSString *const kSettingResume;				/* BOOL */
