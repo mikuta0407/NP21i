@@ -4,8 +4,8 @@
  *
  * Modelled on mRemote's laptop deck: the keys are drawn by cap views that
  * take no touches; this view does all the touch handling, so multi-touch
- * works across keys. Keys are sent with keyinput_down() / keyinput_up(); the
- * PC-98 keyboard emulation repeats held keys by itself.
+ * works across keys. Keys are sent with keyinput_down() / keyinput_up(); held
+ * keys are repeated by NP2kai's key repeat, on by default on iOS (patch 0009).
  *
  * Modifiers (SHIFT / CTRL / GRPH) are held while touched. Tapped alone they
  * latch for the next key, like the key bar's; tapping a latched one again

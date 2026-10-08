@@ -7,6 +7,8 @@
  * in reverse. Key names are SDL scancode names (SDL_GetScancodeFromName),
  * e.g. "3000:F10,500:Down,500:Return,1000:Left Shift+F9", or "#<number>"
  * for scancodes without a name (e.g. "#135" = International 1, PC-98 "_").
+ * "*<ms>" after the keys holds the last one that long (key repeat), e.g.
+ * "500:A*2000".
  * "@<command>" is passed to keybar_debugcommand() instead (on-screen keys
  * and menu commands, e.g. "500:@f·1", "500:@!reset").
  *
@@ -57,6 +59,12 @@ static void run_script(char *script)
 			fprintf(stderr, "debugkeys: sent %s\n", label);
 			continue;
 		}
+		int hold = HOLD_MS;
+		char *star = strchr(colon + 1, '*');
+		if (star) {
+			*star = '\0';
+			hold = atoi(star + 1);
+		}
 
 		SDL_Scancode combo[MAX_COMBO];
 		int count = 0;
@@ -71,7 +79,7 @@ static void run_script(char *script)
 		}
 		for (int i = 0; i < count; i++) {
 			push_key(combo[i], TRUE);
-			usleep(HOLD_MS * 1000);
+			usleep((useconds_t)((i == count - 1) ? hold : HOLD_MS) * 1000);
 		}
 		for (int i = count - 1; i >= 0; i--) {
 			push_key(combo[i], FALSE);
