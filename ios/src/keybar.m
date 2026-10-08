@@ -40,6 +40,7 @@
 #include "midiport.h"
 #include "clipboard.h"
 #include "openurl.h"
+#include "extdisplay.h"
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -299,7 +300,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	_keyboardFrame = CGRectNull;
 
 	_trackpad = [[NP2TrackpadView alloc] initWithFrame:CGRectZero];
-	_trackpad.hidden = !settings_trackpad();
+	_trackpad.hidden = !(settings_trackpad() || extdisplay_isconnected());
 	_trackpad.speed = settings_trackpadspeed();
 	[self addSubview:_trackpad];
 	_scanlines = [[NP2ScanlineView alloc] initWithFrame:CGRectZero];
@@ -387,6 +388,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	[nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
 	[nc addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
 	[nc addObserver:self selector:@selector(settingsChanged) name:NSUserDefaultsDidChangeNotification object:nil];
+	[nc addObserver:self selector:@selector(settingsChanged) name:NP2ExternalDisplayChanged object:nil];
 
 	/* CAPS / KANA also change from the hardware keyboard */
 	__weak NP2KeyBar *weakSelf = self;
@@ -997,7 +999,8 @@ static UIImage *slot_thumbnail(NSInteger slot)
 /* The settings screen can change the keyboard while one is shown. */
 - (void)settingsChanged
 {
-	_trackpad.hidden = !settings_trackpad();
+	/* with an external display, the picture here is not where one looks: touches move the mouse as on a trackpad */
+	_trackpad.hidden = !(settings_trackpad() || extdisplay_isconnected());
 	_trackpad.speed = settings_trackpadspeed();
 	[self setNeedsLayout];		/* the layout when folded */
 	[self applyScreenStyle];
@@ -1816,6 +1819,9 @@ static NP2FileKind file_kind(NSString *name)
 		NSURL *url = [str containsString:@"://"] ? [NSURL URLWithString:str]
 			: [NSURL fileURLWithPath:[[NSFileManager defaultManager].currentDirectoryPath stringByAppendingPathComponent:str]];
 		openurl_open(url);
+	}
+	else if ([command hasPrefix:@"!extdisplay:"]) {
+		extdisplay_debugshow([command hasSuffix:@":on"]);
 	}
 	else if ([command isEqualToString:@"!copyscreen"]) {
 		clipboard_copyscreen();

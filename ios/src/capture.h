@@ -10,6 +10,8 @@
 /* The PC-98 screen as it is shown now, at its own size (640x400...), or
  * nil before the emulator draws. */
 UIImage *capture_screenimage(void);
+/* The same as a CGImage, which the caller releases. */
+CGImageRef capture_screencgimage(void);
 
 /* Saves a PNG to captures/ in the data directory and offers to share it
  * (Photos, AirDrop...). */

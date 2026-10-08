@@ -48,7 +48,7 @@ static void share(UIViewController *host, NSURL *url)
 	[host presentViewController:sheet animated:YES completion:nil];
 }
 
-static CGImageRef create_screen_cgimage(void)
+CGImageRef capture_screencgimage(void)
 {
 	SDL_Surface *src = (SDL_Surface *)scrnmng.dispsurf;
 	if (src == NULL || src->w <= 0 || src->h <= 0) {
@@ -81,7 +81,7 @@ static CGImageRef create_screen_cgimage(void)
 
 UIImage *capture_screenimage(void)
 {
-	CGImageRef cg = create_screen_cgimage();
+	CGImageRef cg = capture_screencgimage();
 	if (cg == NULL) {
 		return nil;
 	}
@@ -142,7 +142,7 @@ static void add_frame(void)
 	if (CMTIME_COMPARE_INLINE(time, <=, s_lastFrame)) {
 		return;
 	}
-	CGImageRef image = create_screen_cgimage();
+	CGImageRef image = capture_screencgimage();
 	if (image == NULL) {
 		return;
 	}
