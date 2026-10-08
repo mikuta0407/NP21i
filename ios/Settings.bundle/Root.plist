@@ -116,6 +116,52 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
+			<string>マウス</string>
+			<key>FooterText</key>
+			<string>オンにすると、画面をタッチパッドのように使います（なぞって移動、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグ）。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>画面をタッチパッドにする</string>
+			<key>Key</key>
+			<string>trackpad_mouse</string>
+			<key>DefaultValue</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Title</key>
+			<string>タッチパッドの速さ</string>
+			<key>Key</key>
+			<string>trackpad_speed</string>
+			<key>DefaultValue</key>
+			<integer>100</integer>
+			<key>Titles</key>
+			<array>
+				<string>50%</string>
+				<string>75%</string>
+				<string>100%（標準）</string>
+				<string>150%</string>
+				<string>200%</string>
+				<string>300%</string>
+			</array>
+			<key>Values</key>
+			<array>
+				<integer>50</integer>
+				<integer>75</integer>
+				<integer>100</integer>
+				<integer>150</integer>
+				<integer>200</integer>
+				<integer>300</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>Title</key>
 			<string>動作</string>
 			<key>FooterText</key>
 			<string>ほかの設定（MIDI の接続先、CPU 速度など）はアプリ内の ≡ →「設定…」にあります。</string>

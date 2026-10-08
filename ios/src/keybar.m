@@ -27,6 +27,7 @@
 #include "dpad.h"
 #include "kbdview.h"
 #include "hinge.h"
+#include "trackpad.h"
 #include "lifecycle.h"
 #include "settings.h"
 #include "settingsview.h"
@@ -238,6 +239,7 @@ static void setup_text_field(UIViewController *controller);
 	BOOL _shownForFold;		/* the keyboard came up by itself when folded */
 	UIButton *_dpadButton;
 	NP2DPad *_dpad;
+	NP2TrackpadView *_trackpad;	/* under everything, over SDL's view */
 	UIButton *_hideButton;
 	UIButton *_showButton;
 	UILabel *_speedLabel;
@@ -261,6 +263,11 @@ static void setup_text_field(UIViewController *controller);
 	self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 	_hidden = [[NSUserDefaults standardUserDefaults] boolForKey:kHiddenKey];
 	_keyboardFrame = CGRectNull;
+
+	_trackpad = [[NP2TrackpadView alloc] initWithFrame:CGRectZero];
+	_trackpad.hidden = !settings_trackpad();
+	_trackpad.speed = settings_trackpadspeed();
+	[self addSubview:_trackpad];
 
 	_bar = [[UIView alloc] init];
 	_bar.backgroundColor = [UIColor colorWithWhite:0.10 alpha:0.92];
@@ -592,6 +599,8 @@ static void setup_text_field(UIViewController *controller);
 /* The settings screen can change the keyboard while one is shown. */
 - (void)settingsChanged
 {
+	_trackpad.hidden = !settings_trackpad();
+	_trackpad.speed = settings_trackpadspeed();
 	if (_screenKeyboardShown) {
 		NP2KeyboardLayout *layout = [NP2KeyboardLayout layoutWithIdentifier:settings_screenkeyboard()];
 		if (layout == nil) {
@@ -646,6 +655,15 @@ static void setup_text_field(UIViewController *controller);
 		[weakSelf confirmReset];
 	}];
 	reset.attributes = UIMenuElementAttributesDestructive;
+	UIDeferredMenuElement *trackpad = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+		UIAction *action = [UIAction actionWithTitle:@"画面をタッチパッドにする" image:[UIImage systemImageNamed:@"rectangle.and.hand.point.up.left"]
+		                                  identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			[[NSUserDefaults standardUserDefaults] setBool:!settings_trackpad() forKey:kSettingTrackpad];
+		}];
+		action.state = settings_trackpad() ? UIMenuElementStateOn : UIMenuElementStateOff;
+		completion(@[ action ]);
+	}];
 	UIAction *settings = [UIAction actionWithTitle:@"設定…" image:[UIImage systemImageNamed:@"gearshape"]
 	                                   identifier:nil handler:^(UIAction *action) {
 		(void)action;
@@ -663,6 +681,7 @@ static void setup_text_field(UIViewController *controller);
 	}];
 	return [UIMenu menuWithChildren:@[
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ fdd, hdd, files ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ trackpad ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, np2menu, reset ]],
 	]];
 }
@@ -976,6 +995,8 @@ static void setup_text_field(UIViewController *controller);
 	scrnmng_settoppad(toppad);
 	scrnmng_setbottompad(pad);
 	CGFloat scale = MIN(viewW / sw, viewH / (sh + toppad + pad));
+	_trackpad.frame = bounds;
+	_trackpad.pointsPerPixel = scale;
 	CGFloat screenBottom = (viewH - (sh + toppad + pad) * scale) / 2 + (toppad + sh) * scale;
 	CGFloat bottomGap = viewH - screenBottom;
 
@@ -1214,6 +1235,9 @@ static void setup_text_field(UIViewController *controller);
 	}
 	else if ([command hasPrefix:@"!kbdblock:"]) {
 		[_screenKeyboard showBlock:[command substringFromIndex:10].integerValue];
+	}
+	else if ([command hasPrefix:@"!trackpad:"]) {
+		[[NSUserDefaults standardUserDefaults] setBool:[[command substringFromIndex:10] isEqualToString:@"on"] forKey:kSettingTrackpad];
 	}
 	else if ([command hasPrefix:@"!hinge:"]) {
 		/* "!hinge:partial" / "open" / "closed" / "none": as if the hinge moved

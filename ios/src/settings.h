@@ -19,6 +19,11 @@ extern NSString *const kSettingResume;				/* BOOL */
 extern NSString *const kSettingShowSpeed;			/* BOOL */
 extern NSString *const kSettingScreenKeyboard;		/* kScreenKeyboardSystem or an NP2KeyboardLayout identifier */
 extern NSString *const kScreenKeyboardSystem;		/* the iOS software keyboard */
+extern NSString *const kSettingTrackpad;			/* BOOL: touches on the screen are a trackpad's */
+extern NSString *const kSettingTrackpadSpeed;		/* % of a finger's travel, 100 = alike */
+
+/* The choices for the trackpad speed, in %. */
+NSArray<NSNumber *> *settings_trackpadspeeds(void);
 
 /* What the keyboard button shows: kScreenKeyboardSystem or a layout identifier. */
 NSString *settings_screenkeyboard(void);
@@ -37,6 +42,9 @@ void settings_initialize(void);
 BOOL settings_runinbackground(void);
 BOOL settings_resume(void);
 BOOL settings_showspeed(void);
+BOOL settings_trackpad(void);
+/* The trackpad speed as a factor (1 = the pointer travels as the finger). */
+double settings_trackpadspeed(void);
 
 /* Saves np2cfg / np2oscfg (np21kai.cfg) after they were changed. */
 void settings_savenp2cfg(void);

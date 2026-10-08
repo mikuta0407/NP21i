@@ -272,7 +272,8 @@ static NP2KeyBlock *pc98_edit(void)
 			keypad(@"7", 0x42), keypad(@"8", 0x43), keypad(@"9", 0x44), keypad(@"*", 0x45),
 		]],
 		[NP2KeyRow row:@[
-			[NP2Key spacer:0.75], [arrow(@"up", @"↑", PC98KEY_UP, @"上") width:1.5], [NP2Key spacer:0.75],
+			[dark(@"esc", @"ESC", PC98KEY_ESC) width:0.75], [arrow(@"up", @"↑", PC98KEY_UP, @"上") width:1.5],
+			[dark(@"tab", @"TAB", PC98KEY_TAB) width:0.75],
 			[NP2Key spacer:0.5],
 			keypad(@"4", 0x46), keypad(@"5", 0x47), keypad(@"6", 0x48), keypad(@"+", 0x49),
 		]],

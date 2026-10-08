@@ -509,6 +509,27 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
+	[sections addObject:section(@"マウス", @"オンにすると、画面をタッチパッドのように使います。指でなぞるとマウスが動き、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグです。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。≡ メニューからも切り替えられます。", @[
+		toggle_row(@"画面をタッチパッドにする", ^BOOL { return settings_trackpad(); }, ^(BOOL on) {
+			[defaults setBool:on forKey:kSettingTrackpad];
+		}),
+		detail_row(@"タッチパッドの速さ", ^NSString *{
+			return [NSString stringWithFormat:@"%ld%%", (long)lround(settings_trackpadspeed() * 100)];
+		}, ^(UIViewController *c) {
+			NSArray<NSNumber *> *values = settings_trackpadspeeds();
+			NSMutableArray<NSString *> *labels = [NSMutableArray array];
+			for (NSNumber *value in values) {
+				[labels addObject:[NSString stringWithFormat:(value.integerValue == 100) ? @"%@%%（標準）" : @"%@%%", value]];
+			}
+			[c.navigationController pushViewController:choice_screen(@"タッチパッドの速さ", @"100% では、指でなぞった長さだけマウスが動きます（速くなぞるとさらに遠くへ）。ソフトウェアやマウスドライバ側の速さも効きます。", labels, ^NSInteger {
+				NSUInteger index = [values indexOfObject:@([defaults integerForKey:kSettingTrackpadSpeed])];
+				return (index == NSNotFound) ? -1 : (NSInteger)index;
+			}, ^(NSInteger index) {
+				[defaults setInteger:values[(NSUInteger)index].integerValue forKey:kSettingTrackpadSpeed];
+			}) animated:YES];
+		}),
+	])];
+
 	[sections addObject:section(@"動作", @"CPU 速度はリセット後に反映されます。速すぎて実時間に追いつかないと、MIDI のタイミングが乱れます（画面に「速度」の警告が出ます）。バックグラウンドでの動作をオフにすると、ほかのアプリに切り替えたときに音と MIDI を止めます。", @[
 		detail_row(@"CPU 速度", ^NSString *{ return clock_label(np2cfg.multiple); }, ^(UIViewController *c) {
 			/* the standard choices, plus the current value if it is another one */
