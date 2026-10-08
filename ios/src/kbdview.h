@@ -21,6 +21,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, strong) NP2KeyboardLayout *layout;
 
+/* Fills the view's height, which is not from heightForWidth: (the lower
+ * half of a folded iPhone Duo): the rows grow, up to a key a little taller
+ * than wide, and the keys are centered in what is left. */
+@property (nonatomic) BOOL fillsHeight;
+
 - (instancetype)initWithLayout:(NP2KeyboardLayout *)layout;
 
 /* The height the keyboard wants for a width, not more than maxHeight. */

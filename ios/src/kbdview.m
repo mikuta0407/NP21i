@@ -23,6 +23,7 @@ static const CGFloat kTabsHeight = 30;
 static const CGFloat kMinUnitWidth = 30;	/* blocks side by side only when the keys are this wide */
 static const CGFloat kMinRowHeight = 22;
 static const CGFloat kMaxRowHeight = 54;
+static const CGFloat kMaxFillAspect = 1.6;	/* filling the height: row height / key width */
 
 typedef NS_ENUM(NSInteger, CapState) {
 	CapStateIdle,
@@ -227,6 +228,14 @@ typedef NS_ENUM(NSInteger, CapState) {
 	return self;
 }
 
+- (void)setFillsHeight:(BOOL)fillsHeight
+{
+	if (fillsHeight != _fillsHeight) {
+		_fillsHeight = fillsHeight;
+		[self setNeedsLayout];
+	}
+}
+
 - (void)setLayout:(NP2KeyboardLayout *)layout
 {
 	if (layout == _layout) {
@@ -316,6 +325,14 @@ typedef NS_ENUM(NSInteger, CapState) {
 	return floor(height);
 }
 
+/* As above, filling the height instead (fillsHeight). */
+- (CGFloat)fillRowUnitHeightForBlocks:(NSArray<NP2KeyBlock *> *)blocks width:(CGFloat)width height:(CGFloat)height
+{
+	CGFloat unit = (width - kPadding * 2) / [self unitsForBlocks:blocks];
+	CGFloat rows = (height - [self fixedHeightForBlocks:blocks width:width]) / [self rowsOfBlocks:blocks];
+	return floor(MAX(MIN(rows, unit * kMaxFillAspect), kMinRowHeight));
+}
+
 /* in row units */
 - (CGFloat)rowsOfBlocks:(NSArray<NP2KeyBlock *> *)blocks
 {
@@ -371,7 +388,9 @@ typedef NS_ENUM(NSInteger, CapState) {
 	}
 	BOOL paged = [self pagedForWidth:width];
 	NSArray<NP2KeyBlock *> *blocks = [self visibleBlocksForWidth:width];
-	CGFloat rowHeight = [self rowUnitHeightForBlocks:blocks width:width maxHeight:area.size.height];
+	CGFloat rowHeight = _fillsHeight
+		? [self fillRowUnitHeightForBlocks:blocks width:width height:area.size.height]
+		: [self rowUnitHeightForBlocks:blocks width:width maxHeight:area.size.height];
 	CGFloat unit = (width - kPadding * 2) / [self unitsForBlocks:blocks];
 
 	CGFloat top = area.origin.y + kPadding;
@@ -379,6 +398,11 @@ typedef NS_ENUM(NSInteger, CapState) {
 	if (paged) {
 		_tabs.frame = CGRectMake(area.origin.x + kPadding, top, width - kPadding * 2, kTabsHeight);
 		top += kTabsHeight + kKeyGap;
+	}
+	if (_fillsHeight) {
+		/* the tabs stay at the top; the keys in the middle of the rest */
+		CGFloat used = [self fixedHeightForBlocks:blocks width:width] + rowHeight * [self rowsOfBlocks:blocks];
+		top += floor(MAX(0, area.size.height - used) / 2);
 	}
 
 	_hitFrames = [NSMutableArray array];

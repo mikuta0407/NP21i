@@ -1,0 +1,143 @@
+diff --git a/sdl/scrnmng.c b/sdl/scrnmng.c
+index 02c3176..3182cec 100755
+--- a/sdl/scrnmng.c
++++ b/sdl/scrnmng.c
+@@ -49,10 +49,13 @@ static SDL_Texture* s_texture;
+ #endif
+ 
+ #if defined(NP2_IOS_KEYBAR)
+-/* Empty band (in PC-98 screen pixels) below the screen, kept inside the
+- * logical size so that the iOS key bar can sit there (scrnmng_setbottompad). */
++/* Empty bands (in PC-98 screen pixels) below and above the screen, kept
++ * inside the logical size so that the iOS key bar can sit there
++ * (scrnmng_setbottompad), and the screen can be moved down past the status
++ * bar (scrnmng_settoppad). */
+ static int s_bottompad;
+-#define	LOGICAL_PAD		s_bottompad
++static int s_toppad;
++#define	LOGICAL_PAD		(s_bottompad + s_toppad)
+ #else
+ #define	LOGICAL_PAD		0
+ #endif
+@@ -700,7 +703,7 @@ scrnmng_update(void)
+ 	SDL_RenderClear(s_renderer);
+ #if USE_SDL >= 3
+ 	if (LOGICAL_PAD && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+-		SDL_FRect dst = {0, 0, 0, 0};
++		SDL_FRect dst = {0, (float)s_toppad, 0, 0};
+ 		SDL_GetTextureSize(s_texture, &dst.w, &dst.h);
+ 		SDL_RenderTexture(s_renderer, s_texture, NULL, &dst);
+ 	} else {
+@@ -708,7 +711,7 @@ scrnmng_update(void)
+ 	}
+ #else
+ 	if (LOGICAL_PAD && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+-		SDL_Rect dst = {0, 0, 0, 0};
++		SDL_Rect dst = {0, s_toppad, 0, 0};
+ 		SDL_QueryTexture(s_texture, NULL, NULL, &dst.w, &dst.h);
+ 		SDL_RenderCopy(s_renderer, s_texture, NULL, &dst);
+ 	} else {
+@@ -754,28 +757,40 @@ void scrnmng_bltwab(void) {
+ }
+ 
+ #if defined(NP2_IOS_KEYBAR)
+-void scrnmng_setbottompad(int pad)
++static void applypad(void)
+ {
+ 	int w, h;
+ 
+-	if (pad == s_bottompad) {
+-		return;
+-	}
+-	s_bottompad = pad;
+ 	if (s_renderer && s_texture && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+ #if USE_SDL >= 3
+ 		float fw, fh;
+ 		SDL_GetTextureSize(s_texture, &fw, &fh);
+ 		w = (int)fw;
+ 		h = (int)fh;
+-		SDL_SetRenderLogicalPresentation(s_renderer, w, h + pad, SDL_LOGICAL_PRESENTATION_LETTERBOX);
++		SDL_SetRenderLogicalPresentation(s_renderer, w, h + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ #else
+ 		SDL_QueryTexture(s_texture, NULL, NULL, &w, &h);
+-		SDL_RenderSetLogicalSize(s_renderer, w, h + pad);
++		SDL_RenderSetLogicalSize(s_renderer, w, h + LOGICAL_PAD);
+ #endif
+ 		scrnmng_update();
+ 	}
+ }
++
++void scrnmng_setbottompad(int pad)
++{
++	if (pad != s_bottompad) {
++		s_bottompad = pad;
++		applypad();
++	}
++}
++
++void scrnmng_settoppad(int pad)
++{
++	if (pad != s_toppad) {
++		s_toppad = pad;
++		applypad();
++	}
++}
+ #endif
+ 
+ #if USE_SDL >= 3
+@@ -786,5 +801,27 @@ void scrnmng_converttoscreen(SDL_Event *event)
+ 	if (s_renderer) {
+ 		SDL_ConvertEventToRenderCoordinates(s_renderer, event);
+ 	}
++#if defined(NP2_IOS_KEYBAR)
++	if (!(scrnmode & SCRNMODE_ROTATEMASK)) {
++		if (event->type == SDL_EVENT_MOUSE_MOTION) {
++			event->motion.y -= s_toppad;
++		} else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN || event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
++			event->button.y -= s_toppad;
++		}
++	}
++#endif
++}
++#elif defined(NP2_IOS_KEYBAR)
++/* SDL2 scales mouse positions to the logical size, which includes the band
++ * above the screen. */
++void scrnmng_converttoscreen(SDL_Event *event)
++{
++	if (!(scrnmode & SCRNMODE_ROTATEMASK)) {
++		if (event->type == SDL_MOUSEMOTION) {
++			event->motion.y -= s_toppad;
++		} else if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP) {
++			event->button.y -= s_toppad;
++		}
++	}
+ }
+ #endif
+diff --git a/sdl/scrnmng.h b/sdl/scrnmng.h
+index 9c418e1..9b3a122 100755
+--- a/sdl/scrnmng.h
++++ b/sdl/scrnmng.h
+@@ -99,8 +99,9 @@ void scrnmng_menudraw(const RECT_T *rct);
+ void scrnmng_update(void);
+ #if defined(NP2_IOS_KEYBAR)
+ void scrnmng_setbottompad(int pad);
++void scrnmng_settoppad(int pad);
+ #endif
+-#if USE_SDL >= 3
++#if USE_SDL >= 3 || defined(NP2_IOS_KEYBAR)
+ void scrnmng_converttoscreen(SDL_Event *event);
+ #endif
+ void scrnmng_updatecursor(void);
+diff --git a/sdl/taskmng.c b/sdl/taskmng.c
+index aa4e19e..b5af4b1 100755
+--- a/sdl/taskmng.c
++++ b/sdl/taskmng.c
+@@ -117,7 +117,7 @@ void taskmng_rol(void) {
+ 	if ((!task_avail) || (!SDL_PollEvent(&e))) {
+ 		return;
+ 	}
+-#if USE_SDL >= 3
++#if USE_SDL >= 3 || defined(NP2_IOS_KEYBAR)
+ 	scrnmng_converttoscreen(&e);
+ #endif
+ 	switch(e.type) {

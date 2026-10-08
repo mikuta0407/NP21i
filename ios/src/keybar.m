@@ -26,6 +26,7 @@
 #include "keyinput.h"
 #include "dpad.h"
 #include "kbdview.h"
+#include "hinge.h"
 #include "lifecycle.h"
 #include "settings.h"
 #include "settingsview.h"
@@ -232,6 +233,9 @@ static void setup_text_field(UIViewController *controller);
 	UIButton *_softkbdButton;
 	NP2KeyboardView *_screenKeyboard;	/* the app's own keyboard, nil until first shown */
 	BOOL _screenKeyboardShown;
+	NP2HingePosture _hinge;
+	BOOL _folded;			/* laptop posture: the keyboard takes the lower half */
+	BOOL _shownForFold;		/* the keyboard came up by itself when folded */
 	UIButton *_dpadButton;
 	NP2DPad *_dpad;
 	UIButton *_hideButton;
@@ -337,6 +341,9 @@ static void setup_text_field(UIViewController *controller);
 		[bar refreshSpeed];
 		[bar checkScreenSize];
 	}];
+	hinge_observe(self, ^(NP2HingePosture posture) {
+		[weakSelf hingeChanged:posture];
+	});
 	[self applyHidden];
 	return self;
 }
@@ -463,8 +470,40 @@ static void setup_text_field(UIViewController *controller);
 	[self setNeedsLayout];
 }
 
+- (void)hingeChanged:(NP2HingePosture)posture
+{
+	if (posture != _hinge) {
+		_hinge = posture;
+		[self setNeedsLayout];
+	}
+}
+
+/* Folded like a laptop (half open, taller than wide), the app's keyboard
+ * comes up by itself in the lower half, and goes again when the device is
+ * opened or turned, unless it was shown or hidden by hand meanwhile. With
+ * iOS's keyboard chosen in the settings, folding changes nothing. */
+- (void)updateFold
+{
+	BOOL folded = (_hinge == NP2HingePosturePartiallyOpen) && [self isPortrait];
+	if (folded == _folded) {
+		return;
+	}
+	_folded = folded;
+	if (folded) {
+		if (!_screenKeyboardShown && [NP2KeyboardLayout layoutWithIdentifier:settings_screenkeyboard()] != nil) {
+			[self showKeyboard];
+			_shownForFold = YES;
+		}
+	}
+	else if (_shownForFold) {
+		_shownForFold = NO;
+		[self hideKeyboards];
+	}
+}
+
 - (void)toggleSoftKeyboard
 {
+	_shownForFold = NO;
 	/* with a hardware keyboard, iOS shows only a thin shortcut bar */
 	BOOL systemShown = _softKeyboardShown && CGRectGetHeight(_keyboardFrame) > 150;
 	if (_screenKeyboardShown || systemShown) {
@@ -545,6 +584,7 @@ static void setup_text_field(UIViewController *controller);
 - (void)chooseKeyboard:(NSString *)identifier
 {
 	[[NSUserDefaults standardUserDefaults] setObject:identifier forKey:kSettingScreenKeyboard];
+	_shownForFold = NO;
 	[self hideKeyboards];
 	[self showKeyboard];
 }
@@ -869,20 +909,46 @@ static void setup_text_field(UIViewController *controller);
 		sh = SCREEN_HEIGHT;
 	}
 	_screenSize = CGSizeMake(sw, sh);
+	[self updateFold];
 	CGFloat sideGap = (viewW - sw * MIN(viewW / sw, viewH / sh)) / 2 - MAX(safe.left, safe.right);
 
-	/* the app's own keyboard: at the bottom, at most about half the height */
+	/* the app's own keyboard: at the bottom, at most about half the height.
+	 * Folded, the lower half below the hinge (in the middle) is for input:
+	 * the bar at the top of it, the keyboard filling the rest. */
 	CGFloat keyboardHeight = 0;
-	if (_screenKeyboardShown) {
+	CGFloat hinge = round(viewH / 2);
+	BOOL folded = _screenKeyboardShown && _folded;
+	if (folded) {
+		keyboardHeight = viewH - hinge - kOverlayBarHeight;
+	}
+	else if (_screenKeyboardShown) {
 		CGFloat maxHeight = viewH * ((viewH > viewW) ? 0.45 : 0.5) - safe.bottom;
 		keyboardHeight = [_screenKeyboard heightForWidth:viewW - safe.left - safe.right maxHeight:maxHeight] + safe.bottom;
+	}
+	if (_screenKeyboardShown) {
+		_screenKeyboard.fillsHeight = folded;
 		_screenKeyboard.frame = CGRectMake(0, viewH - keyboardHeight, viewW, keyboardHeight);
 	}
 
 	/* Wide screens (iPad) leave little room below; make SDL leave a band
 	 * for the bar, shrinking the screen a little. */
 	int pad = 0;
-	if (_screenKeyboardShown) {
+	int toppad = 0;
+	if (folded) {
+		/* The upper half is the screen's alone: as large as fits below the
+		 * status bar, in the middle of what is left. SDL fits the screen
+		 * with both bands to the height, so their sum sets the scale, and
+		 * the band above, where the screen starts. */
+		CGFloat available = hinge - safe.top;
+		BOOL fullWidth = (viewW / sw <= available / sh);
+		CGFloat s = fullWidth ? viewW / sw : available / sh;
+		CGFloat screenTop = safe.top + (available - sh * s) / 2;
+		/* rounded so that the scale is not larger than s */
+		int total = fullWidth ? (int)floor(viewH / s) : (int)ceil(viewH / s);
+		toppad = (int)floor(screenTop / s);
+		pad = MAX(0, total - sh - toppad);
+	}
+	else if (_screenKeyboardShown) {
 		/* the screen above the bar and the keyboard: shrink it to fit */
 		CGFloat available = viewH - keyboardHeight - kOverlayBarHeight;
 		if (viewW / sw <= available / sh) {
@@ -907,9 +973,10 @@ static void setup_text_field(UIViewController *controller);
 			}
 		}
 	}
+	scrnmng_settoppad(toppad);
 	scrnmng_setbottompad(pad);
-	CGFloat scale = MIN(viewW / sw, viewH / (sh + pad));
-	CGFloat screenBottom = (viewH - (sh + pad) * scale) / 2 + sh * scale;
+	CGFloat scale = MIN(viewW / sw, viewH / (sh + toppad + pad));
+	CGFloat screenBottom = (viewH - (sh + toppad + pad) * scale) / 2 + (toppad + sh) * scale;
 	CGFloat bottomGap = viewH - screenBottom;
 
 	CGFloat bottom = bounds.size.height - keyboardHeight;
@@ -1147,6 +1214,18 @@ static void setup_text_field(UIViewController *controller);
 	}
 	else if ([command hasPrefix:@"!kbdblock:"]) {
 		[_screenKeyboard showBlock:[command substringFromIndex:10].integerValue];
+	}
+	else if ([command hasPrefix:@"!hinge:"]) {
+		/* "!hinge:partial" / "open" / "closed" / "none": as if the hinge moved
+		 * (the Simulator's hinge is only in DeviceHub's window) */
+		NSDictionary<NSString *, NSNumber *> *postures = @{
+			@"none": @(NP2HingePostureUnavailable), @"closed": @(NP2HingePostureClosed),
+			@"partial": @(NP2HingePosturePartiallyOpen), @"open": @(NP2HingePostureFullyOpen),
+		};
+		NSNumber *posture = postures[[command substringFromIndex:7]];
+		if (posture) {
+			[self hingeChanged:posture.integerValue];
+		}
 	}
 	else if ([command isEqualToString:@"!softkbd"]) {
 		[self toggleSoftKeyboard];
