@@ -519,6 +519,20 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
+	[sections addObject:section(@"折りたたみ（iPhone Duo）", @"半分開くと、PC-98 キーボードが出ます。縦向き（ノートパソコンのような持ち方）では上半分が画面、下半分がキーボードです。横向き（本のような持ち方）での配置をここで選べます。", @[
+		detail_row(@"横向きで半分開いたとき", ^NSString *{
+			NSArray<NSString *> *labels = settings_landscapefolds();
+			NSInteger index = settings_landscapefold();
+			return (index >= 0 && index < (NSInteger)labels.count) ? labels[(NSUInteger)index] : @"";
+		}, ^(UIViewController *c) {
+			[c.navigationController pushViewController:choice_screen(@"横向きで半分開いたとき", nil, settings_landscapefolds(), ^NSInteger {
+				return settings_landscapefold();
+			}, ^(NSInteger index) {
+				[defaults setInteger:index forKey:kSettingLandscapeFold];
+			}) animated:YES];
+		}),
+	])];
+
 	[sections addObject:section(@"マウス", @"オンにすると、画面をタッチパッドのように使います。指でなぞるとマウスが動き、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグです。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。≡ メニューからも切り替えられます。", @[
 		toggle_row(@"画面をタッチパッドにする", ^BOOL { return settings_trackpad(); }, ^(BOOL on) {
 			[defaults setBool:on forKey:kSettingTrackpad];

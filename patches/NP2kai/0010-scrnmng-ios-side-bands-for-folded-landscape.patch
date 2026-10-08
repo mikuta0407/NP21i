@@ -1,0 +1,160 @@
+diff --git a/sdl/scrnmng.c b/sdl/scrnmng.c
+--- a/sdl/scrnmng.c
++++ b/sdl/scrnmng.c
+@@ -52,12 +52,17 @@
+ /* Empty bands (in PC-98 screen pixels) below and above the screen, kept
+  * inside the logical size so that the iOS key bar can sit there
+  * (scrnmng_setbottompad), and the screen can be moved down past the status
+- * bar (scrnmng_settoppad). */
++ * bar (scrnmng_settoppad); and beside it, so that it can take one half of a
++ * screen folded down the middle (scrnmng_setsidepads). */
+ static int s_bottompad;
+ static int s_toppad;
++static int s_leftpad;
++static int s_rightpad;
+ #define	LOGICAL_PAD		(s_bottompad + s_toppad)
++#define	LOGICAL_HPAD	(s_leftpad + s_rightpad)
+ #else
+ #define	LOGICAL_PAD		0
++#define	LOGICAL_HPAD	0
+ #endif
+ #else
+ static SDL_VideoInfo* s1_videoinfo;
+@@ -177,13 +182,13 @@
+ 	if(mode & SCRNMODE_ROTATEMASK) {
+ 		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.height, scrnmng.width, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	} else {
+-		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.width, scrnmng.height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
++		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.width + LOGICAL_HPAD, scrnmng.height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	}
+ #else
+ 	if(mode & SCRNMODE_ROTATEMASK) {
+ 		SDL_RenderSetLogicalSize(s_renderer, scrnmng.height, scrnmng.width);
+ 	} else {
+-		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width, scrnmng.height + LOGICAL_PAD);
++		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width + LOGICAL_HPAD, scrnmng.height + LOGICAL_PAD);
+ 	}
+ #endif
+ 	switch(scrnmng.bpp) {
+@@ -323,13 +328,13 @@
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+ 		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.height, width, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	} else {
+-		SDL_SetRenderLogicalPresentation(s_renderer, width, scrnmng.height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
++		SDL_SetRenderLogicalPresentation(s_renderer, width + LOGICAL_HPAD, scrnmng.height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	}
+ #else
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+ 		SDL_RenderSetLogicalSize(s_renderer, scrnmng.height, width);
+ 	} else {
+-		SDL_RenderSetLogicalSize(s_renderer, width, scrnmng.height + LOGICAL_PAD);
++		SDL_RenderSetLogicalSize(s_renderer, width + LOGICAL_HPAD, scrnmng.height + LOGICAL_PAD);
+ 	}
+ #endif
+ #if defined(__OPENDINGUX__) && !defined(OPENDINGUX_VGA)
+@@ -411,13 +416,13 @@
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+ 		SDL_SetRenderLogicalPresentation(s_renderer, height, scrnmng.width, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	} else {
+-		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.width, height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
++		SDL_SetRenderLogicalPresentation(s_renderer, scrnmng.width + LOGICAL_HPAD, height + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ 	}
+ #else
+ 	if(scrnmode & SCRNMODE_ROTATEMASK) {
+ 		SDL_RenderSetLogicalSize(s_renderer, height, scrnmng.width);
+ 	} else {
+-		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width, height + LOGICAL_PAD);
++		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width + LOGICAL_HPAD, height + LOGICAL_PAD);
+ 	}
+ #endif
+ #if defined(__OPENDINGUX__) && !defined(OPENDINGUX_VGA)
+@@ -702,16 +707,16 @@
+ 	}
+ 	SDL_RenderClear(s_renderer);
+ #if USE_SDL >= 3
+-	if (LOGICAL_PAD && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+-		SDL_FRect dst = {0, (float)s_toppad, 0, 0};
++	if ((LOGICAL_PAD || LOGICAL_HPAD) && !(scrnmode & SCRNMODE_ROTATEMASK)) {
++		SDL_FRect dst = {(float)s_leftpad, (float)s_toppad, 0, 0};
+ 		SDL_GetTextureSize(s_texture, &dst.w, &dst.h);
+ 		SDL_RenderTexture(s_renderer, s_texture, NULL, &dst);
+ 	} else {
+ 		SDL_RenderTexture(s_renderer, s_texture, NULL, NULL);
+ 	}
+ #else
+-	if (LOGICAL_PAD && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+-		SDL_Rect dst = {0, s_toppad, 0, 0};
++	if ((LOGICAL_PAD || LOGICAL_HPAD) && !(scrnmode & SCRNMODE_ROTATEMASK)) {
++		SDL_Rect dst = {s_leftpad, s_toppad, 0, 0};
+ 		SDL_QueryTexture(s_texture, NULL, NULL, &dst.w, &dst.h);
+ 		SDL_RenderCopy(s_renderer, s_texture, NULL, &dst);
+ 	} else {
+@@ -767,10 +772,10 @@
+ 		SDL_GetTextureSize(s_texture, &fw, &fh);
+ 		w = (int)fw;
+ 		h = (int)fh;
+-		SDL_SetRenderLogicalPresentation(s_renderer, w, h + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
++		SDL_SetRenderLogicalPresentation(s_renderer, w + LOGICAL_HPAD, h + LOGICAL_PAD, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+ #else
+ 		SDL_QueryTexture(s_texture, NULL, NULL, &w, &h);
+-		SDL_RenderSetLogicalSize(s_renderer, w, h + LOGICAL_PAD);
++		SDL_RenderSetLogicalSize(s_renderer, w + LOGICAL_HPAD, h + LOGICAL_PAD);
+ #endif
+ 		scrnmng_update();
+ 	}
+@@ -791,6 +796,15 @@
+ 		applypad();
+ 	}
+ }
++
++void scrnmng_setsidepads(int left, int right)
++{
++	if (left != s_leftpad || right != s_rightpad) {
++		s_leftpad = left;
++		s_rightpad = right;
++		applypad();
++	}
++}
+ #endif
+ 
+ #if USE_SDL >= 3
+@@ -804,22 +818,26 @@
+ #if defined(NP2_IOS_KEYBAR)
+ 	if (!(scrnmode & SCRNMODE_ROTATEMASK)) {
+ 		if (event->type == SDL_EVENT_MOUSE_MOTION) {
++			event->motion.x -= s_leftpad;
+ 			event->motion.y -= s_toppad;
+ 		} else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN || event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
++			event->button.x -= s_leftpad;
+ 			event->button.y -= s_toppad;
+ 		}
+ 	}
+ #endif
+ }
+ #elif defined(NP2_IOS_KEYBAR)
+-/* SDL2 scales mouse positions to the logical size, which includes the band
+- * above the screen. */
++/* SDL2 scales mouse positions to the logical size, which includes the bands
++ * above and left of the screen. */
+ void scrnmng_converttoscreen(SDL_Event *event)
+ {
+ 	if (!(scrnmode & SCRNMODE_ROTATEMASK)) {
+ 		if (event->type == SDL_MOUSEMOTION) {
++			event->motion.x -= s_leftpad;
+ 			event->motion.y -= s_toppad;
+ 		} else if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP) {
++			event->button.x -= s_leftpad;
+ 			event->button.y -= s_toppad;
+ 		}
+ 	}
+diff --git a/sdl/scrnmng.h b/sdl/scrnmng.h
+--- a/sdl/scrnmng.h
++++ b/sdl/scrnmng.h
+@@ -100,6 +100,7 @@
+ #if defined(NP2_IOS_KEYBAR)
+ void scrnmng_setbottompad(int pad);
+ void scrnmng_settoppad(int pad);
++void scrnmng_setsidepads(int left, int right);
+ #endif
+ #if USE_SDL >= 3 || defined(NP2_IOS_KEYBAR)
+ void scrnmng_converttoscreen(SDL_Event *event);

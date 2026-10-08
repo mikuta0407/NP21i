@@ -227,6 +227,15 @@ static void setup_text_field(UIViewController *controller);
 - (void)setHdd:(REG8)drv path:(NSString *)path;
 @end
 
+/* How the screen and the app's keyboard share a half open iPhone Duo. */
+typedef NS_ENUM(NSInteger, NP2Fold) {
+	NP2FoldNone,		/* not folded, or no hinge */
+	NP2FoldLaptop,		/* taller than wide: the screen above the hinge, the keyboard below */
+	NP2FoldStacked,		/* wider than tall: the keyboard at the bottom as usual */
+	NP2FoldScreenLeft,	/* wider than tall: the screen on the left half, the keyboard on the right */
+	NP2FoldScreenRight	/* ... and the other way round */
+};
+
 @implementation NP2KeyBar {
 	UIView *_bar;
 	UIScrollView *_scroll;
@@ -235,7 +244,7 @@ static void setup_text_field(UIViewController *controller);
 	NP2KeyboardView *_screenKeyboard;	/* the app's own keyboard, nil until first shown */
 	BOOL _screenKeyboardShown;
 	NP2HingePosture _hinge;
-	BOOL _folded;			/* laptop posture: the keyboard takes the lower half */
+	NP2Fold _fold;			/* folded: the keyboard takes part of the screen */
 	BOOL _shownForFold;		/* the keyboard came up by itself when folded */
 	UIButton *_dpadButton;
 	NP2DPad *_dpad;
@@ -485,17 +494,38 @@ static void setup_text_field(UIViewController *controller);
 	}
 }
 
-/* Folded like a laptop (half open, taller than wide), the app's keyboard
- * comes up by itself in the lower half, and goes again when the device is
- * opened or turned, unless it was shown or hidden by hand meanwhile. With
+/* Folded (half open), the app's keyboard comes up by itself: like a laptop
+ * (taller than wide) in the lower half; held like a book (wider than tall)
+ * as the settings say, at the bottom or in one half. It goes again when the
+ * device is opened, unless it was shown or hidden by hand meanwhile. With
  * iOS's keyboard chosen in the settings, folding changes nothing. */
 - (void)updateFold
 {
-	BOOL folded = (_hinge == NP2HingePosturePartiallyOpen) && [self isPortrait];
-	if (folded == _folded) {
+	NP2Fold fold = NP2FoldNone;
+	if (_hinge == NP2HingePosturePartiallyOpen) {
+		if ([self isPortrait]) {
+			fold = NP2FoldLaptop;
+		}
+		else {
+			switch (settings_landscapefold()) {
+				case 1:
+					fold = NP2FoldScreenLeft;
+					break;
+				case 2:
+					fold = NP2FoldScreenRight;
+					break;
+				default:
+					fold = NP2FoldStacked;
+					break;
+			}
+		}
+	}
+	BOOL folded = (fold != NP2FoldNone);
+	BOOL wasFolded = (_fold != NP2FoldNone);
+	_fold = fold;
+	if (folded == wasFolded) {
 		return;
 	}
-	_folded = folded;
 	if (folded) {
 		if (!_screenKeyboardShown && [NP2KeyboardLayout layoutWithIdentifier:settings_screenkeyboard()] != nil) {
 			[self showKeyboard];
@@ -603,6 +633,7 @@ static void setup_text_field(UIViewController *controller);
 {
 	_trackpad.hidden = !settings_trackpad();
 	_trackpad.speed = settings_trackpadspeed();
+	[self setNeedsLayout];		/* the layout when folded */
 	_screenKeyboard.hapticFeedback = settings_keyhaptics();
 	_screenKeyboard.keyPreview = settings_keypreview();
 	if (_screenKeyboardShown) {
@@ -933,6 +964,10 @@ static void setup_text_field(UIViewController *controller);
 	}
 	_screenSize = CGSizeMake(sw, sh);
 	[self updateFold];
+	if (_screenKeyboardShown && (_fold == NP2FoldScreenLeft || _fold == NP2FoldScreenRight)) {
+		[self layoutSideBySide:CGSizeMake(sw, sh)];
+		return;
+	}
 	CGFloat sideGap = (viewW - sw * MIN(viewW / sw, viewH / sh)) / 2 - MAX(safe.left, safe.right);
 
 	/* the app's own keyboard: at the bottom, at most about half the height.
@@ -940,7 +975,7 @@ static void setup_text_field(UIViewController *controller);
 	 * the bar at the top of it, the keyboard filling the rest. */
 	CGFloat keyboardHeight = 0;
 	CGFloat hinge = round(viewH / 2);
-	BOOL folded = _screenKeyboardShown && _folded;
+	BOOL folded = _screenKeyboardShown && (_fold == NP2FoldLaptop);
 	if (folded) {
 		keyboardHeight = viewH - hinge - kOverlayBarHeight;
 	}
@@ -996,6 +1031,7 @@ static void setup_text_field(UIViewController *controller);
 			}
 		}
 	}
+	scrnmng_setsidepads(0, 0);
 	scrnmng_settoppad(toppad);
 	scrnmng_setbottompad(pad);
 	CGFloat scale = MIN(viewW / sw, viewH / (sh + toppad + pad));
@@ -1051,6 +1087,58 @@ static void setup_text_field(UIViewController *controller);
 	CGSize show = CGSizeMake(44, 30);
 	_showButton.frame = CGRectMake(bounds.size.width - safe.right - show.width - kGap,
 		bounds.size.height - MAX(safe.bottom, kGap) - show.height, show.width, show.height);
+}
+
+/* Held like a book: the screen in one half, as large as fits and in the
+ * middle of it; the bar at the top of the other half and the keyboard
+ * filling the rest. SDL fits the screen with its bands to the view, so the
+ * bands are what the view is in screen pixels, around where the screen goes. */
+- (void)layoutSideBySide:(CGSize)screen
+{
+	CGRect bounds = self.bounds;
+	UIEdgeInsets safe = self.safeAreaInsets;
+	CGFloat viewW = bounds.size.width;
+	CGFloat viewH = bounds.size.height;
+	CGFloat hinge = round(viewW / 2);
+	BOOL screenLeft = (_fold == NP2FoldScreenLeft);
+	CGRect screenHalf = screenLeft
+		? CGRectMake(safe.left, safe.top, hinge - safe.left, viewH - safe.top - safe.bottom)
+		: CGRectMake(hinge, safe.top, viewW - safe.right - hinge, viewH - safe.top - safe.bottom);
+	CGRect inputHalf = screenLeft
+		? CGRectMake(hinge, 0, viewW - hinge, viewH)
+		: CGRectMake(0, 0, hinge, viewH);
+
+	CGFloat s = MIN(screenHalf.size.width / screen.width, screenHalf.size.height / screen.height);
+	int totalW = (int)ceil(viewW / s);
+	int totalH = (int)ceil(viewH / s);
+	CGFloat scale = MIN(viewW / totalW, viewH / totalH);		/* what SDL uses, not above s */
+	CGFloat originX = (viewW - totalW * scale) / 2;
+	CGFloat originY = (viewH - totalH * scale) / 2;
+	CGFloat screenX = CGRectGetMidX(screenHalf) - screen.width * scale / 2;
+	CGFloat screenY = CGRectGetMidY(screenHalf) - screen.height * scale / 2;
+	int left = MAX(0, (int)lround((screenX - originX) / scale));
+	int top = MAX(0, (int)lround((screenY - originY) / scale));
+	scrnmng_setsidepads(left, MAX(0, totalW - (int)screen.width - left));
+	scrnmng_settoppad(top);
+	scrnmng_setbottompad(MAX(0, totalH - (int)screen.height - top));
+	_trackpad.frame = bounds;
+	_trackpad.pointsPerPixel = scale;
+
+	CGFloat barTop = MAX(safe.top, kGap);
+	CGFloat barHeight = _hidden ? 0 : kOverlayBarHeight;
+	CGRect bar = CGRectMake(inputHalf.origin.x + (screenLeft ? 0 : safe.left), barTop,
+		inputHalf.size.width - (screenLeft ? safe.right : safe.left), kOverlayBarHeight);
+	_bar.frame = bar;
+	[self layoutHorizontal:bar.size];
+	_screenKeyboard.fillsHeight = YES;
+	_screenKeyboard.frame = CGRectMake(bar.origin.x, barTop + barHeight, bar.size.width, viewH - barTop - barHeight);
+	[self layoutDPadBelow:bar vertical:NO keyboardTop:0];
+
+	CGSize speed = CGSizeMake(84, 22);
+	_speedLabel.frame = CGRectMake(CGRectGetMaxX(screenHalf) - speed.width - kGap, MAX(safe.top, kGap), speed.width, speed.height);
+	CGSize show = CGSizeMake(44, 30);
+	_showButton.frame = CGRectMake(CGRectGetMaxX(inputHalf) - safe.right - show.width - kGap,
+		MAX(safe.top, kGap), show.width, show.height);
 }
 
 /* Portrait: in the space below the bar, at the bottom right (thumb).
@@ -1269,6 +1357,10 @@ static void setup_text_field(UIViewController *controller);
 		if (![_trackpad debugCommand:command]) {
 			NSLog(@"keybar: unknown command %@", command);
 		}
+	}
+	else if ([command hasPrefix:@"!foldland:"]) {
+		/* "!foldland:0|1|2": the layout held like a book (settings) */
+		[[NSUserDefaults standardUserDefaults] setInteger:[command substringFromIndex:10].integerValue forKey:kSettingLandscapeFold];
 	}
 	else if ([command hasPrefix:@"!trackpad:"]) {
 		[[NSUserDefaults standardUserDefaults] setBool:[[command substringFromIndex:10] isEqualToString:@"on"] forKey:kSettingTrackpad];

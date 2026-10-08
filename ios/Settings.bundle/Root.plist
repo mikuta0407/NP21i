@@ -136,6 +136,36 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
+			<string>折りたたみ（iPhone Duo）</string>
+			<key>FooterText</key>
+			<string>半分開くと PC-98 キーボードが出ます。縦向きでは上半分が画面、下半分がキーボードです。</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Title</key>
+			<string>横向きで半分開いたとき</string>
+			<key>Key</key>
+			<string>fold_landscape</string>
+			<key>DefaultValue</key>
+			<integer>0</integer>
+			<key>Titles</key>
+			<array>
+				<string>上に画面・下にキーボード</string>
+				<string>左に画面・右にキーボード</string>
+				<string>右に画面・左にキーボード</string>
+			</array>
+			<key>Values</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+				<integer>2</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>Title</key>
 			<string>マウス</string>
 			<key>FooterText</key>
 			<string>オンにすると、画面をタッチパッドのように使います（なぞって移動、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグ）。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。</string>

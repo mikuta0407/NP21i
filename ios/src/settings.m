@@ -6,7 +6,7 @@
  * midi_input_latency_ms  -> cmmidi_midiin_latency_ms (default 20, 0 = deliver immediately)
  * keyboard_layout        -> keyinput_setlayout() (0 = JIS, 1 = US; default JIS)
  * run_in_background, resume_state -> lifecycle.m; show_speed_warning, screen_keyboard,
- * trackpad_mouse, trackpad_speed, key_haptics, key_preview -> keybar.m
+ * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape -> keybar.m
  *
  * The environment variables NP2_MIDI_LATENCY_MS / NP2_MIDIIN_LATENCY_MS
  * override the settings (for testing with simctl: SIMCTL_CHILD_NP2_...=0).
@@ -34,6 +34,7 @@ NSString *const kSettingScreenKeyboard = @"screen_keyboard";
 NSString *const kScreenKeyboardSystem = @"system";
 NSString *const kSettingKeyHaptics = @"key_haptics";
 NSString *const kSettingKeyPreview = @"key_preview";
+NSString *const kSettingLandscapeFold = @"fold_landscape";
 NSString *const kSettingTrackpad = @"trackpad_mouse";
 NSString *const kSettingTrackpadSpeed = @"trackpad_speed";
 
@@ -92,6 +93,16 @@ BOOL settings_keyhaptics(void)
 BOOL settings_keypreview(void)
 {
 	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingKeyPreview];
+}
+
+NSInteger settings_landscapefold(void)
+{
+	return [[NSUserDefaults standardUserDefaults] integerForKey:kSettingLandscapeFold];
+}
+
+NSArray<NSString *> *settings_landscapefolds(void)
+{
+	return @[ @"上に画面・下にキーボード", @"左に画面・右にキーボード", @"右に画面・左にキーボード" ];
 }
 
 BOOL settings_trackpad(void)
