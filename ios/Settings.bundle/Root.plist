@@ -104,12 +104,14 @@
 			<key>Titles</key>
 			<array>
 				<string>PC-98 キーボード</string>
+				<string>レコンポーザ（ステップ入力）</string>
 				<string>ゲーム用キーボード</string>
 				<string>iOS のキーボード</string>
 			</array>
 			<key>Values</key>
 			<array>
 				<string>pc98</string>
+				<string>rcp</string>
 				<string>game</string>
 				<string>system</string>
 			</array>

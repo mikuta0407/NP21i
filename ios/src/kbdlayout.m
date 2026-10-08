@@ -326,6 +326,111 @@ static NP2KeyBlock *game_block(void)
 	]];
 }
 
+// ---- Recomposer (step input)
+
+/* Recomposer V3.0's track editor (F3 EDIT): a note is typed as its name,
+ * then + (sharp) or - (flat), then the octave (kept from the last note):
+ * "C", "F+5", "B-". RETURN enters it with the last length, f·1-f·10 with a
+ * length (whole note ... 32nd). Digits alone are a key number. Letters and
+ * CTRL + letters (shown as ^N) are the editing commands (HELP lists them). */
+
+static NP2Key *command(NSString *identifier, NSString *label, NSString *letter, UINT8 code, NSString *spoken)
+{
+	return [[[[[NP2Key key:identifier label:label code:code] shifted:letter] style:NP2KeyStyleDark] width:1.08] spoken:spoken];
+}
+
+static NP2Key *ctrl_command(NSString *identifier, NSString *label, NSString *letter, UINT8 code, NSString *spoken)
+{
+	return [[[[[NP2Key chord:identifier label:label codes:@[ @(PC98KEY_CTRL), @(code) ]] shifted:[@"^" stringByAppendingString:letter]]
+		style:NP2KeyStyleDark] width:1.08] spoken:spoken];
+}
+
+static NP2KeyBlock *rcp_notes(void)
+{
+	/* f·1-f·10 as Recomposer shows them: whole, dotted half, half ... 32nd */
+	static const char *const lengths[10][2] = {
+		{"全", "全音符"}, {"2分.", "付点2分音符"}, {"2分", "2分音符"}, {"4分.", "付点4分音符"}, {"4分", "4分音符"},
+		{"8分.", "付点8分音符"}, {"8分", "8分音符"}, {"16分.", "付点16分音符"}, {"16分", "16分音符"}, {"32分", "32分音符"},
+	};
+	NSMutableArray<NP2Key *> *lengthKeys = [NSMutableArray array];
+	for (int i = 0; i < 10; i++) {
+		if (i == 5) {
+			[lengthKeys addObject:[NP2Key spacer:0.3]];
+		}
+		[lengthKeys addObject:[[[[[NP2Key key:[NSString stringWithFormat:@"f%d", i + 1] label:str(lengths[i][0]) code:(UINT8)(PC98KEY_F1 + i)]
+			shifted:[NSString stringWithFormat:@"f·%d", i + 1]] style:NP2KeyStyleAccent] width:1.18] spoken:str(lengths[i][1])]];
+	}
+
+	/* C D E F G A B, as on a staff */
+	static const struct { const char *name; const char *letter; UINT8 code; } notes[] = {
+		{"ド", "C", 0x2b}, {"レ", "D", 0x1f}, {"ミ", "E", 0x12}, {"ファ", "F", 0x20},
+		{"ソ", "G", 0x21}, {"ラ", "A", 0x1d}, {"シ", "B", 0x2d},
+	};
+	NSMutableArray<NP2Key *> *noteKeys = [NSMutableArray array];
+	for (size_t i = 0; i < NELEMENTS(notes); i++) {
+		[noteKeys addObject:[[[NP2Key key:[NSString stringWithFormat:@"%02x", notes[i].code] label:str(notes[i].name) code:notes[i].code]
+			shifted:str(notes[i].letter)] width:1.4]];
+	}
+	[noteKeys addObject:[NP2Key spacer:0.3]];
+	[noteKeys addObject:[[[NP2Key chord:@"sharp" label:@"♯" codes:@[ @(PC98KEY_SHIFT), @0x26 ]] shifted:@"+"] spoken:@"シャープ"]];
+	[noteKeys addObject:[[[NP2Key key:@"0b" label:@"♭" code:0x0b] shifted:@"-"] spoken:@"フラット"]];
+
+	NSMutableArray<NP2Key *> *digits = [NSMutableArray array];
+	for (int n = 1; n <= 10; n++) {
+		UINT8 code = (UINT8)(n % 10 == 0 ? 0x0a : n);
+		[digits addObject:[[NP2Key key:[NSString stringWithFormat:@"%02x", code] label:[NSString stringWithFormat:@"%d", n % 10] code:code]
+			width:1.06]];
+	}
+	[digits addObject:[NP2Key spacer:0.3]];
+	[digits addObject:[[dark(@"bs", @"BS", PC98KEY_BS) width:1.2] spoken:@"バックスペース"]];
+
+	return [NP2KeyBlock block:@"音符" rows:@[
+		[NP2KeyRow row:lengthKeys height:0.9],
+		[NP2KeyRow row:noteKeys],
+		[NP2KeyRow row:digits],
+		[NP2KeyRow row:@[
+			[dark(@"esc", @"ESC", PC98KEY_ESC) width:1.5],
+			[[[dark(@"tab", @"和音", PC98KEY_TAB) shifted:@"TAB"] width:1.5] spoken:@"和音入力"],
+			[[[[NP2Key chord:@"measend" label:@"小節線" codes:@[ @(PC98KEY_SHIFT), @0x27 ]] shifted:@"*"] width:1.5] spoken:@"小節線"],
+			[[[[NP2Key key:@"ret" label:@"入力" code:PC98KEY_RETURN] shifted:@"RETURN"] style:NP2KeyStyleAccent] width:7.6],
+		]],
+	]];
+}
+
+static NP2KeyBlock *rcp_edit(void)
+{
+	return [NP2KeyBlock block:@"編集" rows:@[
+		[NP2KeyRow row:@[
+			[[dark(@"help", @"HELP", PC98KEY_HELP) width:1.08] spoken:@"ヘルプ"],
+			ctrl_command(@"ctrl-t", @"先頭", @"T", 0x14, @"先頭の小節"),
+			ctrl_command(@"ctrl-b", @"前小節", @"B", 0x2d, @"前の小節"),
+			ctrl_command(@"ctrl-n", @"次小節", @"N", 0x2e, @"次の小節"),
+			[[dark(@"stop", @"STOP", PC98KEY_STOP) width:1.08] spoken:@"ストップ"],
+		] height:0.9],
+		[NP2KeyRow row:@[
+			command(@"cmd-r", @"コピー", @"R", 0x13, @"コピー"),
+			command(@"cmd-y", @"貼付", @"Y", 0x15, @"貼り付け"),
+			command(@"cmd-k", @"削除", @"K", 0x24, @"削除"),
+			command(@"cmd-i", @"挿入", @"I", 0x17, @"挿入"),
+			command(@"cmd-u", @"取消", @"U", 0x16, @"取り消し"),
+		]],
+		[NP2KeyRow row:@[
+			[[[dark(@"rollup", @"前頁", PC98KEY_ROLLUP) shifted:@"R.UP"] width:1.08] spoken:@"ロールアップ"],
+			[arrow(@"up", @"↑", PC98KEY_UP, @"上") width:1.08],
+			[[[dark(@"rolldown", @"次頁", PC98KEY_ROLLDOWN) shifted:@"R.DN"] width:1.08] spoken:@"ロールダウン"],
+			command(@"cmd-m", @"小節再生", @"M", 0x2f, @"小節を再生"),
+			command(@"cmd-p", @"位置再生", @"P", 0x19, @"カーソル位置から再生"),
+		]],
+		[NP2KeyRow row:@[
+			[arrow(@"left", @"←", PC98KEY_LEFT, @"左") width:1.08],
+			[arrow(@"down", @"↓", PC98KEY_DOWN, @"下") width:1.08],
+			[arrow(@"right", @"→", PC98KEY_RIGHT, @"右") width:1.08],
+			command(@"cmd-j", @"全体再生", @"J", 0x23, @"トラックを再生"),
+			command(@"cmd-h", @"消去", @"H", 0x22, @"消去"),
+		]],
+	]];
+}
+
 @implementation NP2KeyboardLayout
 
 + (NP2KeyboardLayout *)layout:(NSString *)identifier title:(NSString *)title blocks:(NSArray<NP2KeyBlock *> *)blocks
@@ -342,7 +447,7 @@ static NP2KeyBlock *game_block(void)
 	static NSArray<NP2KeyboardLayout *> *layouts;
 	static dispatch_once_t once;
 	dispatch_once(&once, ^{
-		layouts = @[ [self pc98Layout], [self gameLayout] ];
+		layouts = @[ [self pc98Layout], [self recomposerLayout], [self gameLayout] ];
 	});
 	return layouts;
 }
@@ -360,6 +465,11 @@ static NP2KeyBlock *game_block(void)
 + (NP2KeyboardLayout *)pc98Layout
 {
 	return [self layout:@"pc98" title:@"PC-98 キーボード" blocks:@[ pc98_main(), pc98_edit() ]];
+}
+
++ (NP2KeyboardLayout *)recomposerLayout
+{
+	return [self layout:@"rcp" title:@"レコンポーザ（ステップ入力）" blocks:@[ rcp_notes(), rcp_edit() ]];
 }
 
 + (NP2KeyboardLayout *)gameLayout
