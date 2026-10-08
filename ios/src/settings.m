@@ -6,6 +6,7 @@
  * midi_input_latency_ms  -> cmmidi_midiin_latency_ms (default 20, 0 = deliver immediately)
  * keyboard_layout        -> keyinput_setlayout() (0 = JIS, 1 = US; default JIS)
  * midi_clock_out         -> mpu98ii_midiclockout (NP2kai patch 0015)
+ * volume_master          -> np2cfg.vol_master (the other volumes are in np21kai.cfg)
  * run_in_background, resume_state -> lifecycle.m; show_speed_warning, screen_keyboard,
  * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape, mouse_lock, pinch_zoom, screen_style -> keybar.m;
  * gamepad_mode, gamepad_map -> gamepad.m
@@ -22,6 +23,14 @@
 #include <pccore.h>
 #include <nevent.h>
 #include <cbus/mpu98ii.h>
+#include <sound/sound.h>
+#include <sound/beep.h>
+#include <sound/opngen.h>
+#include <sound/psggen.h>
+#include <sound/rhythm.h>
+#include <sound/adpcm.h>
+#include <sound/pcm86.h>
+#include <sound/oplgen.h>
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -46,6 +55,7 @@ NSString *const kSettingGamepadMap = @"gamepad_map";
 NSString *const kSettingMouseLock = @"mouse_lock";
 NSString *const kSettingPinchZoom = @"pinch_zoom";
 NSString *const kSettingScreenStyle = @"screen_style";
+NSString *const kSettingVolumeMaster = @"volume_master";
 NSString *const kSettingTrackpad = @"trackpad_mouse";
 NSString *const kSettingTrackpadSpeed = @"trackpad_speed";
 
@@ -72,6 +82,13 @@ static void apply_settings(void)
 	apply_ms(&cmmidi_latency_ms, read_ms(kSettingMidiOutputLatency, "NP2_MIDI_LATENCY_MS"), "MIDI output latency");
 	apply_ms(&cmmidi_midiin_latency_ms, read_ms(kSettingMidiInputLatency, "NP2_MIDIIN_LATENCY_MS"), "MIDI input latency");
 	mpu98ii_midiclockout = [[NSUserDefaults standardUserDefaults] boolForKey:kSettingMidiClockOut] ? 1 : 0;
+	UINT8 master = (UINT8)MIN(MAX([[NSUserDefaults standardUserDefaults] integerForKey:kSettingVolumeMaster], 0), 100);
+	if (master != np2cfg.vol_master) {
+		np2cfg.vol_master = master;
+		if (pccore.realclock) {		/* sound_init() applies them at start */
+			settings_applyvolumes();
+		}
+	}
 
 	static int layout = -1;
 	int newlayout = (int)[[NSUserDefaults standardUserDefaults] integerForKey:kSettingKeyboardLayout];
@@ -191,6 +208,19 @@ void settings_savenp2cfg(void)
 	sysmng_update(SYS_UPDATECFG | SYS_UPDATEOSCFG);
 }
 
+/* As pccore.c's sound_init() sets them. */
+void settings_applyvolumes(void)
+{
+	UINT master = np2cfg.vol_master;
+	beep_setvol(np2cfg.BEEP_VOL);
+	opngen_setvol(np2cfg.vol_fm * master / 100);
+	psggen_setvol(np2cfg.vol_ssg * master / 100);
+	rhythm_setvol(np2cfg.vol_rhythm * master / 100);
+	adpcm_setvol(np2cfg.vol_adpcm * master / 100);
+	pcm86gen_setvol(np2cfg.vol_pcm * master / 100);
+	oplgen_setvol(np2cfg.vol_fm * master / 100);
+}
+
 void settings_initialize(void)
 {
 
@@ -199,7 +229,8 @@ void settings_initialize(void)
 	[[NSUserDefaults standardUserDefaults] registerDefaults:@{ kSettingMidiOutputLatency: @20, kSettingMidiInputLatency: @20, kSettingKeyboardLayout: @(KEYLAYOUT_JIS),
 		kSettingRunInBackground: @YES, kSettingResume: @YES, kSettingShowSpeed: @YES,
 		kSettingScreenKeyboard: @"pc98", kSettingTrackpadSpeed: @100,
-		kSettingKeyHaptics: @YES, kSettingKeyPreview: @YES, kSettingMouseLock: @YES, kSettingPinchZoom: @YES }];
+		kSettingKeyHaptics: @YES, kSettingKeyPreview: @YES, kSettingMouseLock: @YES, kSettingPinchZoom: @YES,
+		kSettingVolumeMaster: @100 }];
 	apply_settings();
 	/* Changes made in the Settings app arrive while the app is in the
 	 * background, so re-read them when it becomes active again. */

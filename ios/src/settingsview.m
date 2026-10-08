@@ -39,7 +39,8 @@ typedef NS_ENUM(NSInteger, RowKind) {
 	RowKindDetail,		/* value on the right, opens something */
 	RowKindToggle,
 	RowKindButton,
-	RowKindChoice		/* checkmark when isOn */
+	RowKindChoice,		/* checkmark when isOn */
+	RowKindSlider		/* a slider below the title */
 };
 
 @interface NP2Row : NSObject
@@ -49,6 +50,12 @@ typedef NS_ENUM(NSInteger, RowKind) {
 @property (nonatomic, copy) BOOL (^isOn)(void);
 @property (nonatomic, copy) void (^setOn)(BOOL on);
 @property (nonatomic, copy) void (^action)(UIViewController *controller);
+/* RowKindSlider: the range, the value now, and setSlider while it moves
+ * (done: the finger was lifted). */
+@property (nonatomic) float sliderMin;
+@property (nonatomic) float sliderMax;
+@property (nonatomic, copy) float (^sliderValue)(void);
+@property (nonatomic, copy) void (^setSlider)(float value, BOOL done);
 /* Shown by swiping the row to the left. */
 @property (nonatomic, copy) NSArray<UIContextualAction *> *(^swipeActions)(UIViewController *controller);
 @end
@@ -82,6 +89,18 @@ static NP2Row *toggle_row(NSString *title, BOOL (^isOn)(void), void (^setOn)(BOO
 	row.title = title;
 	row.isOn = isOn;
 	row.setOn = setOn;
+	return row;
+}
+
+static NP2Row *slider_row(NSString *title, float min, float max, float (^value)(void), void (^set)(float value, BOOL done))
+{
+	NP2Row *row = [NP2Row new];
+	row.kind = RowKindSlider;
+	row.title = title;
+	row.sliderMin = min;
+	row.sliderMax = max;
+	row.sliderValue = value;
+	row.setSlider = set;
 	return row;
 }
 
@@ -197,6 +216,22 @@ static NP2Section *section(NSString *header, NSString *footer, NSArray<NP2Row *>
 	case RowKindChoice:
 		cell.accessoryType = row.isOn() ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
 		break;
+	case RowKindSlider: {
+		UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(0, 0, 200, 34)];
+		slider.minimumValue = row.sliderMin;
+		slider.maximumValue = row.sliderMax;
+		slider.value = row.sliderValue();
+		slider.accessibilityLabel = row.title;
+		[slider addAction:[UIAction actionWithHandler:^(UIAction *action) {
+			row.setSlider(((UISlider *)action.sender).value, NO);
+		}] forControlEvents:UIControlEventValueChanged];
+		[slider addAction:[UIAction actionWithHandler:^(UIAction *action) {
+			row.setSlider(((UISlider *)action.sender).value, YES);
+		}] forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
+		cell.accessoryView = slider;
+		cell.selectionStyle = UITableViewCellSelectionStyleNone;
+		break;
+	}
 	}
 	return cell;
 }
@@ -750,6 +785,47 @@ static NSArray<NP2Section *> *settings_sections(void)
 			[c.navigationController pushViewController:latency_screen(@"入力の遅延", kSettingMidiInputLatency, @[ @0, @20, @30, @50 ], 20) animated:YES];
 		}),
 	])];
+
+	{
+		/* the sound generators' volumes, 0-128 in np2cfg (np21kai.cfg) */
+		NP2Row *(^level)(NSString *, UINT8 *) = ^NP2Row *(NSString *title, UINT8 *value) {
+			return slider_row(title, 0, 128, ^float { return *value; }, ^(float v, BOOL done) {
+				*value = (UINT8)lroundf(v);
+				settings_applyvolumes();
+				if (done) {
+					settings_savenp2cfg();
+				}
+			});
+		};
+		NSArray<NSString *> *beeps = @[ @"なし", @"小", @"中", @"大" ];
+		[sections addObject:section(@"音量", @"PC-98 の音源ごとの音量で、すぐに反映されます（マスター以外は環境ごと）。FM と SSG、リズムは FM 音源（PC-9801-26K / 86 など）、ADPCM は 86 ボードなどの ADPCM、PCM は 86 ボードの PCM です。外部 MIDI 機器の音量は変わりません。", @[
+			slider_row(@"マスター", 0, 100, ^float { return np2cfg.vol_master; }, ^(float v, BOOL done) {
+				[defaults setInteger:lroundf(v) forKey:kSettingVolumeMaster];
+			}),
+			level(@"FM", &np2cfg.vol_fm),
+			level(@"SSG", &np2cfg.vol_ssg),
+			level(@"リズム", &np2cfg.vol_rhythm),
+			level(@"ADPCM", &np2cfg.vol_adpcm),
+			level(@"PCM", &np2cfg.vol_pcm),
+			detail_row(@"ビープ音", ^NSString *{ return beeps[MIN(np2cfg.BEEP_VOL & 3, 3)]; }, ^(UIViewController *c) {
+				[c.navigationController pushViewController:choice_screen(@"ビープ音", nil, beeps, ^NSInteger {
+					return np2cfg.BEEP_VOL & 3;
+				}, ^(NSInteger index) {
+					np2cfg.BEEP_VOL = (UINT8)index;
+					settings_applyvolumes();
+					settings_savenp2cfg();
+				}) animated:YES];
+			}),
+			button_row(@"標準に戻す", ^(UIViewController *c) {
+				[defaults setInteger:100 forKey:kSettingVolumeMaster];
+				np2cfg.vol_fm = np2cfg.vol_ssg = np2cfg.vol_rhythm = np2cfg.vol_adpcm = np2cfg.vol_pcm = 64;
+				np2cfg.BEEP_VOL = 3;
+				settings_applyvolumes();
+				settings_savenp2cfg();
+				[(NP2TableViewController *)c reload];
+			}),
+		])];
+	}
 
 	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもの、ゲーム用キーボードは十字キーと Z / X / スペース / リターンなどを大きくしたもので、iOS のキーボードは文字どおりに入力します。どれを使うかは環境ごとに覚えます。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。振動と文字の大きな表示は、PC-98 キーボードを押したときのものです。長押しで連続入力は、押し続けたキーを 0.5 秒後から繰り返します（NP2 メニューの Key-repeat と同じ設定です）。", @[
 		detail_row(@"画面のキーボード", ^NSString *{

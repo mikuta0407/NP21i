@@ -28,6 +28,7 @@ extern NSString *const kSettingGamepadMap;			/* button name -> PC-98 key code (g
 extern NSString *const kSettingMouseLock;			/* BOOL: a connected mouse's pointer stays in the app */
 extern NSString *const kSettingPinchZoom;			/* BOOL: two fingers zoom the screen */
 extern NSString *const kSettingScreenStyle;		/* 0 sharp, 1 smooth, 2 smooth with scan lines */
+extern NSString *const kSettingVolumeMaster;		/* 0-100 (NP2 keeps it out of np21kai.cfg) */
 extern NSString *const kSettingTrackpad;			/* BOOL: touches on the screen are a trackpad's */
 extern NSString *const kSettingTrackpadSpeed;		/* % of a finger's travel, 100 = alike */
 
@@ -68,6 +69,10 @@ double settings_trackpadspeed(void);
 
 /* Saves np2cfg / np2oscfg (np21kai.cfg) after they were changed. */
 void settings_savenp2cfg(void);
+
+/* Applies np2cfg's volumes (master, FM, SSG, rhythm, ADPCM, PCM, beep) to
+ * the sound generators now, as a reset would. */
+void settings_applyvolumes(void);
 
 #ifdef __cplusplus
 }
