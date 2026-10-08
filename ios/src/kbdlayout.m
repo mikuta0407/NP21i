@@ -401,11 +401,11 @@ static NP2KeyBlock *rcp_edit(void)
 {
 	return [NP2KeyBlock block:@"編集" rows:@[
 		[NP2KeyRow row:@[
+			[[dark(@"esc", @"ESC", PC98KEY_ESC) width:1.08] spoken:@"エスケープ"],
 			[[dark(@"help", @"HELP", PC98KEY_HELP) width:1.08] spoken:@"ヘルプ"],
 			ctrl_command(@"ctrl-t", @"先頭", @"T", 0x14, @"先頭の小節"),
 			ctrl_command(@"ctrl-b", @"前小節", @"B", 0x2d, @"前の小節"),
 			ctrl_command(@"ctrl-n", @"次小節", @"N", 0x2e, @"次の小節"),
-			[[dark(@"stop", @"STOP", PC98KEY_STOP) width:1.08] spoken:@"ストップ"],
 		] height:0.9],
 		[NP2KeyRow row:@[
 			command(@"cmd-r", @"コピー", @"R", 0x13, @"コピー"),
@@ -431,7 +431,8 @@ static NP2KeyBlock *rcp_edit(void)
 	]];
 }
 
-/* TAB starts a chord on the note typed before it (or the last one); then
+/* TAB (in the notes block) starts a chord on the note typed before it (or
+ * the last one); then
  * f·1-f·10 and SHIFT + f·1-f·10 choose its kind, ↑ ↓ invert it, → ← step
  * through the kinds, and RETURN enters it with the last length (the ST
  * column changes it). ↓ then goes on to the next step. */
@@ -453,10 +454,9 @@ static NP2KeyBlock *rcp_chords(void)
 	};
 	NSMutableArray<NP2KeyRow *> *rows = [NSMutableArray array];
 	[rows addObject:[NP2KeyRow row:@[
-		[[[[NP2Key key:@"tab" label:@"和音入力" code:PC98KEY_TAB] shifted:@"TAB"] style:NP2KeyStyleAccent] width:3],
-		[[arrow(@"up", @"転回↑", PC98KEY_UP, @"転回 上") shifted:@"↑"] width:1],
-		[[arrow(@"down", @"転回↓", PC98KEY_DOWN, @"転回 下、次へ") shifted:@"↓次へ"] width:1],
-		[[[[NP2Key key:@"ret" label:@"入力" code:PC98KEY_RETURN] shifted:@"RETURN"] style:NP2KeyStyleAccent] width:2],
+		[[arrow(@"up", @"転回↑", PC98KEY_UP, @"転回 上") shifted:@"↑"] width:2],
+		[[arrow(@"down", @"転回↓", PC98KEY_DOWN, @"転回 下、次へ") shifted:@"↓ 次へ"] width:2],
+		[[[[NP2Key key:@"ret" label:@"入力" code:PC98KEY_RETURN] shifted:@"RETURN"] style:NP2KeyStyleAccent] width:3],
 	] height:0.9]];
 	for (int r = 0; r < 3; r++) {
 		NSMutableArray<NP2Key *> *keys = [NSMutableArray array];
