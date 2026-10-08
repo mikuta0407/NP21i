@@ -431,6 +431,52 @@ static NP2KeyBlock *rcp_edit(void)
 	]];
 }
 
+/* TAB starts a chord on the note typed before it (or the last one); then
+ * f·1-f·10 and SHIFT + f·1-f·10 choose its kind, ↑ ↓ invert it, → ← step
+ * through the kinds, and RETURN enters it with the last length (the ST
+ * column changes it). ↓ then goes on to the next step. */
+static NP2KeyBlock *rcp_chords(void)
+{
+	/* kind, f key (1-10), with SHIFT */
+	static const struct { const char *name; int fkey; BOOL shift; const char *spoken; } kinds[3][7] = {
+		{
+			{"メジャー", 1, NO, "メジャー"}, {"m", 10, YES, "マイナー"}, {"7", 2, NO, "セブンス"}, {"m7", 9, YES, "マイナーセブンス"},
+			{"maj7", 3, NO, "メジャーセブンス"}, {"6", 4, NO, "シックス"}, {"m6", 8, YES, "マイナーシックス"},
+		}, {
+			{"9", 6, NO, "ナインス"}, {"m9", 7, YES, "マイナーナインス"}, {"maj9", 5, NO, "メジャーナインス"}, {"69", 6, YES, "シックスナインス"},
+			{"7sus4", 5, YES, "セブンスサスフォー"}, {"dim", 9, NO, "ディミニッシュ"}, {"dim7", 10, NO, "ディミニッシュセブンス"},
+		}, {
+			{"aug", 3, YES, "オーギュメント"}, {"aug7", 4, YES, "オーギュメントセブンス"}, {"7(♭5)", 1, YES, "セブンスフラットファイブ"},
+			{"m7(♭5)", 2, YES, "マイナーセブンスフラットファイブ"}, {"7(♭9)", 7, NO, "セブンスフラットナインス"},
+			{"7(♯9)", 8, NO, "セブンスシャープナインス"}, {NULL, 0, NO, NULL},
+		},
+	};
+	NSMutableArray<NP2KeyRow *> *rows = [NSMutableArray array];
+	[rows addObject:[NP2KeyRow row:@[
+		[[[[NP2Key key:@"tab" label:@"和音入力" code:PC98KEY_TAB] shifted:@"TAB"] style:NP2KeyStyleAccent] width:3],
+		[[arrow(@"up", @"転回↑", PC98KEY_UP, @"転回 上") shifted:@"↑"] width:1],
+		[[arrow(@"down", @"転回↓", PC98KEY_DOWN, @"転回 下、次へ") shifted:@"↓次へ"] width:1],
+		[[[[NP2Key key:@"ret" label:@"入力" code:PC98KEY_RETURN] shifted:@"RETURN"] style:NP2KeyStyleAccent] width:2],
+	] height:0.9]];
+	for (int r = 0; r < 3; r++) {
+		NSMutableArray<NP2Key *> *keys = [NSMutableArray array];
+		for (int i = 0; i < 7; i++) {
+			if (kinds[r][i].name == NULL) {
+				[keys addObject:[NP2Key spacer:1]];
+				continue;
+			}
+			UINT8 code = (UINT8)(PC98KEY_F1 + kinds[r][i].fkey - 1);
+			NSString *identifier = [NSString stringWithFormat:@"ch%s%d", kinds[r][i].shift ? "s" : "", kinds[r][i].fkey];
+			NP2Key *key = kinds[r][i].shift
+				? [NP2Key chord:identifier label:str(kinds[r][i].name) codes:@[ @(PC98KEY_SHIFT), @(code) ]]
+				: [NP2Key key:identifier label:str(kinds[r][i].name) code:code];
+			[keys addObject:[[key style:NP2KeyStyleDark] spoken:str(kinds[r][i].spoken)]];
+		}
+		[rows addObject:[NP2KeyRow row:keys]];
+	}
+	return [NP2KeyBlock block:@"和音" rows:rows];
+}
+
 @implementation NP2KeyboardLayout
 
 + (NP2KeyboardLayout *)layout:(NSString *)identifier title:(NSString *)title blocks:(NSArray<NP2KeyBlock *> *)blocks
@@ -469,7 +515,7 @@ static NP2KeyBlock *rcp_edit(void)
 
 + (NP2KeyboardLayout *)recomposerLayout
 {
-	return [self layout:@"rcp" title:@"レコンポーザ（ステップ入力）" blocks:@[ rcp_notes(), rcp_edit() ]];
+	return [self layout:@"rcp" title:@"レコンポーザ（ステップ入力）" blocks:@[ rcp_notes(), rcp_chords(), rcp_edit() ]];
 }
 
 + (NP2KeyboardLayout *)gameLayout
