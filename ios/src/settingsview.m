@@ -15,6 +15,7 @@
 #include "midiport.h"
 #include "diskedit.h"
 #include "lifecycle.h"
+#include "profile.h"
 
 #import <CoreAudioKit/CoreAudioKit.h>
 #include <pccore.h>
@@ -122,6 +123,8 @@ static NP2Section *section(NSString *header, NSString *footer, NSArray<NP2Row *>
 	[super viewDidLoad];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reload)
 	                                             name:kMidiSetupChanged object:nil];
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reload)
+	                                             name:NP2ProfilesChanged object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated
@@ -433,6 +436,147 @@ static UIViewController *new_disk_screen(void)
 	}];
 }
 
+// ---- environments
+
+void settingsview_switchprofile(UIViewController *host, NSString *identifier)
+{
+	if ([identifier isEqualToString:profile_active()]) {
+		return;
+	}
+	if (settings_resume()) {
+		profile_switch(identifier);		/* where it is now is saved, to come back to */
+		return;
+	}
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"「%@」に切り替えますか？", profile_name(identifier)]
+	                                                               message:@"「前回の状態から再開」がオフなので、今の状態は保存されず、PC-98 はリセットされます。"
+	                                                        preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:nil]];
+	[alert addAction:[UIAlertAction actionWithTitle:@"切り替える" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+		(void)action;
+		profile_switch(identifier);
+	}]];
+	[host presentViewController:alert animated:YES completion:nil];
+}
+
+static void show_error(UIViewController *host, NSString *title, NSError *error)
+{
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:error.localizedDescription
+	                                                        preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+	[host presentViewController:alert animated:YES completion:nil];
+}
+
+static void ask_name(UIViewController *host, NSString *title, NSString *message, NSString *name, NSArray<NSString *> *buttons,
+                     void (^done)(NSString *name, NSInteger button))
+{
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message
+	                                                        preferredStyle:UIAlertControllerStyleAlert];
+	[alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+		field.text = name;
+		field.placeholder = @"名前";
+		field.clearButtonMode = UITextFieldViewModeWhileEditing;
+	}];
+	__weak UIAlertController *weakAlert = alert;
+	for (NSUInteger i = 0; i < buttons.count; i++) {
+		[alert addAction:[UIAlertAction actionWithTitle:buttons[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+			(void)action;
+			NSString *text = [weakAlert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+			if (text.length) {
+				done(text, (NSInteger)i);
+			}
+		}]];
+	}
+	[alert addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:nil]];
+	[host presentViewController:alert animated:YES completion:nil];
+}
+
+static void create_profile(UIViewController *host)
+{
+	ask_name(host, @"新しい環境",
+		[NSString stringWithFormat:@"今の環境（%@）の設定をもとに作ります。ハードディスクは複製するか、同じものを使うか、なしにして新しく作るか選べます。", profile_name(profile_active())],
+		@"", @[ @"ハードディスクを複製して作る", @"同じハードディスクで作る", @"ハードディスクなしで作る" ],
+		^(NSString *name, NSInteger button) {
+			NSError *error = nil;
+			NSString *identifier = profile_create(name, (NP2ProfileDisks)button, &error);
+			if (identifier == nil) {
+				show_error(host, @"環境を作れませんでした", error);
+				return;
+			}
+			settingsview_switchprofile(host, identifier);
+		});
+}
+
+static void profile_actions(UIViewController *host, NSString *identifier)
+{
+	BOOL active = [identifier isEqualToString:profile_active()];
+	UIAlertController *sheet = [UIAlertController alertControllerWithTitle:profile_name(identifier)
+	                                                               message:[profile_disks(identifier) componentsJoinedByString:@"\n"]
+	                                                        preferredStyle:UIAlertControllerStyleAlert];
+	if (!active) {
+		[sheet addAction:[UIAlertAction actionWithTitle:@"この環境に切り替える" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+			(void)action;
+			settingsview_switchprofile(host, identifier);
+		}]];
+	}
+	[sheet addAction:[UIAlertAction actionWithTitle:@"名前を変える" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+		(void)action;
+		ask_name(host, @"名前を変える", nil, profile_name(identifier), @[ @"変更" ], ^(NSString *name, NSInteger button) {
+			profile_rename(identifier, name);
+		});
+	}]];
+	if (!active) {
+		[sheet addAction:[UIAlertAction actionWithTitle:@"削除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+			(void)action;
+			UIAlertController *confirm = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"「%@」を削除しますか？", profile_name(identifier)]
+			                                                                 message:@"設定と保存された状態を削除します。ハードディスクのイメージは hdd/ に残ります（ディスクの画面で削除できます）。"
+			                                                          preferredStyle:UIAlertControllerStyleAlert];
+			[confirm addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:nil]];
+			[confirm addAction:[UIAlertAction actionWithTitle:@"削除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
+				(void)a;
+				profile_delete(identifier);
+			}]];
+			[host presentViewController:confirm animated:YES completion:nil];
+		}]];
+	}
+	[sheet addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:nil]];
+	[host presentViewController:sheet animated:YES completion:nil];
+}
+
+static UIViewController *profiles_screen(void)
+{
+	return [[NP2TableViewController alloc] initWithTitle:@"環境" build:^NSArray<NP2Section *> *{
+		NSMutableArray<NP2Row *> *rows = [NSMutableArray array];
+		for (NSString *identifier in profile_ids()) {
+			NP2Row *row = [NP2Row new];
+			row.kind = RowKindChoice;
+			NSArray<NSString *> *disks = profile_disks(identifier);
+			row.title = disks.count
+				? [NSString stringWithFormat:@"%@\n%@", profile_name(identifier), [disks componentsJoinedByString:@"\n"]]
+				: [NSString stringWithFormat:@"%@\n（ハードディスクなし）", profile_name(identifier)];
+			row.isOn = ^BOOL { return [identifier isEqualToString:profile_active()]; };
+			row.action = ^(UIViewController *controller) {
+				profile_actions(controller, identifier);
+			};
+			[rows addObject:row];
+		}
+		return @[
+			section(nil, @"環境ごとに、PC-98 の設定（ハードディスク、メモリ、サウンドボード、MIDI など）、フロッピー、「前回の状態から再開」の状態を持ちます。切り替えると今の環境を保存して、選んだ環境で PC-98 を起動し直します。", rows),
+			section(nil, nil, @[ button_row(@"新しい環境を作る…", ^(UIViewController *controller) {
+				create_profile(controller);
+			}) ]),
+		];
+	}];
+}
+
+static void present_screen(UIViewController *host, UIViewController *root);
+
+/* On its own (from the ≡ menu): done closes it, as there is nothing to go
+ * back to. */
+void settingsview_presentprofiles(UIViewController *host)
+{
+	present_screen(host, profiles_screen());
+}
+
 // ---- license
 
 @interface NP2TextViewController : UIViewController
@@ -571,6 +715,12 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
+	[sections addObject:section(@"環境", @"レコンポーザ用、ゲーム用など、ハードディスクや PC-98 の設定の組み合わせを切り替えられます。", @[
+		detail_row(@"使う環境", ^NSString *{ return profile_name(profile_active()); }, ^(UIViewController *c) {
+			[c.navigationController pushViewController:profiles_screen() animated:YES];
+		}),
+	])];
+
 	[sections addObject:section(@"動作", @"CPU 速度はリセット後に反映されます。速すぎて実時間に追いつかないと、MIDI のタイミングが乱れます（画面に「速度」の警告が出ます）。バックグラウンドでの動作をオフにすると、ほかのアプリに切り替えたときに音と MIDI を止めます。", @[
 		detail_row(@"CPU 速度", ^NSString *{ return clock_label(np2cfg.multiple); }, ^(UIViewController *c) {
 			/* the standard choices, plus the current value if it is another one */
@@ -659,10 +809,15 @@ static void post_midi_change(void)
 
 void settingsview_present(UIViewController *host)
 {
-	midiport_onchange = post_midi_change;
-	NP2TableViewController *root = [[NP2TableViewController alloc] initWithTitle:@"設定" build:^NSArray<NP2Section *> *{
+	present_screen(host, [[NP2TableViewController alloc] initWithTitle:@"設定" build:^NSArray<NP2Section *> *{
 		return settings_sections();
-	}];
+	}]);
+}
+
+/* root in a sheet with a done button, the emulator paused meanwhile. */
+static void present_screen(UIViewController *host, UIViewController *root)
+{
+	midiport_onchange = post_midi_change;
 	UINavigationController *nav = [[NP2PausingNavigationController alloc] initWithRootViewController:root];
 	root.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone primaryAction:[UIAction actionWithHandler:^(UIAction *action) {
 		(void)action;

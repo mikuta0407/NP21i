@@ -12,6 +12,7 @@
 #import <UIKit/UIKit.h>
 #include "sdlcompat.h"
 #include "gamepad.h"
+#include "profile.h"
 #if USE_SDL >= 3
 #include <SDL3/SDL_main.h>
 #else
@@ -54,6 +55,7 @@ int main(int argc, char *argv[])
 		SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait");
 	}
 	settings_initialize();
+	profile_initialize();
 	midiport_initialize();
 	debugmidi_start();
 	debugkeys_start();

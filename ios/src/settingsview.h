@@ -10,6 +10,11 @@
 /* Shows the settings screen over `host`. */
 void settingsview_present(UIViewController *host);
 
+/* Shows the settings screen at its environments. */
+void settingsview_presentprofiles(UIViewController *host);
+/* Switches to an environment, asking first when the state would be lost. */
+void settingsview_switchprofile(UIViewController *host, NSString *identifier);
+
 /* Shows the guide when there is nothing to boot (no hard disk, no floppy). */
 void settingsview_presentguideifneeded(UIViewController *host);
 void settingsview_presentguide(UIViewController *host);

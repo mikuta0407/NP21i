@@ -41,6 +41,30 @@ static const OEMCHAR *state_path(void)
 	return file_getcd(OEMTEXT("np2.sav"));
 }
 
+/* statsave_save() / statsave_load() only ask sdl/np2.c's main loop to do it
+ * before the next frame; done now instead, so that the file is there (or
+ * the machine loaded) when they return: before iOS terminates the app, or
+ * when an environment is switched (profile.m). The UI runs between frames,
+ * where the main loop would do it. */
+static int save_now(const OEMCHAR *path)
+{
+	statsave_save(path);
+	int ret = statsave_save_d();
+	g_u8ControlState = 0;
+	if (ret != STATFLAG_SUCCESS) {
+		file_delete(path);
+	}
+	return ret;
+}
+
+static int load_now(const OEMCHAR *path)
+{
+	statsave_load(path);
+	int ret = statsave_load_d();
+	g_u8ControlState = 0;
+	return ret;
+}
+
 static void show_alert(NSString *title, NSString *message)
 {
 	UIWindowScene *scene = nil;
@@ -59,20 +83,20 @@ static void show_alert(NSString *title, NSString *message)
 	[root presentViewController:alert animated:YES completion:nil];
 }
 
-static void restore_state(void)
+static BOOL restore_state(void)
 {
 	OEMCHAR path[MAX_PATH];
 	OEMCHAR info[1024];
 
 	file_cpyname(path, state_path(), NELEMENTS(path));
 	if (!settings_resume() || ![[NSFileManager defaultManager] fileExistsAtPath:[NSString stringWithUTF8String:path]]) {
-		return;
+		return NO;
 	}
 	int ret = statsave_check(path, info, NELEMENTS(info));
 	if (ret == STATFLAG_SUCCESS) {
-		ret = statsave_load(path);
+		ret = load_now(path);
 		NSLog(@"lifecycle: restored the last session (%d)", ret);
-		return;
+		return YES;
 	}
 	/* Saved by another build (STATFLAG_VERSION etc.) or the disks changed:
 	 * loading could corrupt the disks, so start fresh. */
@@ -81,16 +105,20 @@ static void restore_state(void)
 	show_alert(@"前回の状態から再開できませんでした",
 		(ret & STATFLAG_DISKCHG) ? @"ディスクイメージが前回から変わっています。通常どおり起動しました。"
 		                         : @"保存された状態がこのバージョンと合いません。通常どおり起動しました。");
+	return NO;
 }
 
 static void save_state(void)
 {
+	OEMCHAR path[MAX_PATH];
+
+	file_cpyname(path, state_path(), NELEMENTS(path));
 	if (settings_resume()) {
-		int ret = flagsave(str_sav);
+		int ret = save_now(path);
 		NSLog(@"lifecycle: saved state (%d)", ret);
 	}
 	else {
-		flagdelete(str_sav);
+		file_delete(path);
 	}
 }
 
@@ -114,6 +142,16 @@ static void will_enter_foreground(void)
 		s_paused = NO;
 		NSLog(@"lifecycle: resumed");
 	}
+}
+
+void lifecycle_savestate(void)
+{
+	save_state();
+}
+
+int lifecycle_restorestate(void)
+{
+	return restore_state();
 }
 
 void lifecycle_start(void)

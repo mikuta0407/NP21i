@@ -13,6 +13,11 @@ extern "C" {
  * saved when the app last went to the background, and starts watching. */
 void lifecycle_start(void);
 
+/* Saves the machine to np2.sav now (deletes it with resuming turned off);
+ * loads it, as at start, returning nonzero when it was (profile.m). */
+void lifecycle_savestate(void);
+int lifecycle_restorestate(void);
+
 /* Ratio of emulated time to real time over the last second (1.0 = full
  * speed), or a negative value while unknown. Call regularly. */
 double lifecycle_emulationspeed(void);

@@ -29,6 +29,7 @@
 #include "hinge.h"
 #include "trackpad.h"
 #include "gamepad.h"
+#include "profile.h"
 #include "lifecycle.h"
 #include "settings.h"
 #include "settingsview.h"
@@ -715,6 +716,26 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		[weakSelf confirmReset];
 	}];
 	reset.attributes = UIMenuElementAttributesDestructive;
+	UIDeferredMenuElement *profiles = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+		NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
+		for (NSString *identifier in profile_ids()) {
+			UIAction *action = [UIAction actionWithTitle:profile_name(identifier) image:nil identifier:nil handler:^(UIAction *a) {
+				(void)a;
+				settingsview_switchprofile([weakSelf hostController], identifier);
+			}];
+			action.state = [identifier isEqualToString:profile_active()] ? UIMenuElementStateOn : UIMenuElementStateOff;
+			[items addObject:action];
+		}
+		[items addObject:[UIAction actionWithTitle:@"環境の管理…" image:[UIImage systemImageNamed:@"square.stack.3d.up"]
+		                                identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			settingsview_presentprofiles([weakSelf hostController]);
+		}]];
+		UIMenu *menu = [UIMenu menuWithTitle:@"環境" image:[UIImage systemImageNamed:@"square.stack.3d.up"]
+		                          identifier:nil options:0 children:items];
+		menu.subtitle = profile_name(profile_active());
+		completion(@[ menu ]);
+	}];
 	UIDeferredMenuElement *trackpad = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
 		UIAction *action = [UIAction actionWithTitle:@"画面をタッチパッドにする" image:[UIImage systemImageNamed:@"rectangle.and.hand.point.up.left"]
 		                                  identifier:nil handler:^(UIAction *a) {
@@ -740,7 +761,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		diskedit_present([weakSelf hostController]);
 	}];
 	return [UIMenu menuWithChildren:@[
-		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ fdd, hdd, files ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ profiles, fdd, hdd, files ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ trackpad ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, np2menu, reset ]],
 	]];
@@ -1287,6 +1308,9 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	else if ([command isEqualToString:@"!settings"]) {
 		settingsview_present([self hostController]);
 	}
+	else if ([command isEqualToString:@"!profiles"]) {
+		settingsview_presentprofiles([self hostController]);
+	}
 	else if ([command hasPrefix:@"!newdisk:"]) {
 		/* "!newdisk:<index>:<MB>" */
 		NSArray<NSString *> *args = [[command substringFromIndex:9] componentsSeparatedByString:@":"];
@@ -1381,6 +1405,33 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	else if ([command hasPrefix:@"!pad"]) {
 		if (![_trackpad debugCommand:command]) {
 			NSLog(@"keybar: unknown command %@", command);
+		}
+	}
+	else if ([command hasPrefix:@"!profile:"]) {
+		/* "!profile:new:<name>:<copy|share|none>", "!profile:switch:<name>",
+		 * "!profile:delete:<name>", "!profile:list" */
+		NSArray<NSString *> *args = [[command substringFromIndex:9] componentsSeparatedByString:@":"];
+		if ([args[0] isEqualToString:@"new"] && args.count > 2) {
+			NSArray<NSString *> *kinds = @[ @"copy", @"share", @"none" ];
+			NSError *error = nil;
+			NSString *identifier = profile_create(args[1], (NP2ProfileDisks)[kinds indexOfObject:args[2]], &error);
+			NSLog(@"keybar: profile %@ %@", identifier, error.localizedDescription ?: @"");
+		}
+		else if (([args[0] isEqualToString:@"switch"] || [args[0] isEqualToString:@"delete"]) && args.count > 1) {
+			for (NSString *identifier in profile_ids()) {
+				if ([profile_name(identifier) isEqualToString:args[1]]) {
+					if ([args[0] isEqualToString:@"switch"]) {
+						profile_switch(identifier);
+					}
+					else {
+						profile_delete(identifier);
+					}
+				}
+			}
+		}
+		for (NSString *identifier in profile_ids()) {
+			NSLog(@"keybar: profile %@%@ %@", [identifier isEqualToString:profile_active()] ? @"*" : @"",
+				profile_name(identifier), [profile_disks(identifier) componentsJoinedByString:@", "]);
 		}
 	}
 	else if ([command hasPrefix:@"!foldland:"]) {
