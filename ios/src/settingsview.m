@@ -816,9 +816,12 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"マウス", @"オンにすると、画面をタッチパッドのように使います。指でなぞるとマウスが動き、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグです。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。≡ メニューからも切り替えられます。iPad にマウスやトラックパッドをつないだときは、ポインタをアプリの中に固定して、動かした分だけ PC-98 のマウスを動かします（NP2 メニューや設定を開いている間は固定しません）。", @[
+	[sections addObject:section(@"マウス", @"オンにすると、画面をタッチパッドのように使います。指でなぞるとマウスが動き、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグです。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。≡ メニューからも切り替えられます。iPad にマウスやトラックパッドをつないだときは、ポインタをアプリの中に固定して、動かした分だけ PC-98 のマウスを動かします（NP2 メニューや設定を開いている間は固定しません）。画面を 2 本指でピンチすると拡大でき、拡大中は 2 本指でなぞると動かせます（≡ メニューの「拡大を戻す」か、縮めきると元に戻ります）。", @[
 		toggle_row(@"画面をタッチパッドにする", ^BOOL { return settings_trackpad(); }, ^(BOOL on) {
 			[defaults setBool:on forKey:kSettingTrackpad];
+		}),
+		toggle_row(@"2 本指で画面を拡大", ^BOOL { return settings_pinchzoom(); }, ^(BOOL on) {
+			[defaults setBool:on forKey:kSettingPinchZoom];
 		}),
 		toggle_row(@"つないだマウスのポインタを固定", ^BOOL { return settings_mouselock(); }, ^(BOOL on) {
 			[defaults setBool:on forKey:kSettingMouseLock];

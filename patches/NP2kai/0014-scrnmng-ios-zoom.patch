@@ -1,0 +1,132 @@
+diff --git a/sdl/scrnmng.c b/sdl/scrnmng.c
+--- a/sdl/scrnmng.c
++++ b/sdl/scrnmng.c
+@@ -58,11 +58,26 @@
+ static int s_toppad;
+ static int s_leftpad;
+ static int s_rightpad;
++/* Zoomed in (scrnmng_setzoom): the part of the screen shown, in its pixels. */
++static float s_zoom = 1;
++static float s_zoomx, s_zoomy;
++
++/* The part shown of a w x h screen: all of it unless zoomed in. */
++static void zoomrect(int w, int h, float *x, float *y, float *zw, float *zh)
++{
++	float z = (s_zoom > 1) ? s_zoom : 1;
++	*zw = w / z;
++	*zh = h / z;
++	*x = MIN(MAX(s_zoomx - *zw / 2, 0), w - *zw);
++	*y = MIN(MAX(s_zoomy - *zh / 2, 0), h - *zh);
++}
+ #define	LOGICAL_PAD		(s_bottompad + s_toppad)
+ #define	LOGICAL_HPAD	(s_leftpad + s_rightpad)
++#define	ZOOMED			(s_zoom > 1)
+ #else
+ #define	LOGICAL_PAD		0
+ #define	LOGICAL_HPAD	0
++#define	ZOOMED			0
+ #endif
+ #else
+ static SDL_VideoInfo* s1_videoinfo;
+@@ -707,18 +722,27 @@
+ 	}
+ 	SDL_RenderClear(s_renderer);
+ #if USE_SDL >= 3
+-	if ((LOGICAL_PAD || LOGICAL_HPAD) && !(scrnmode & SCRNMODE_ROTATEMASK)) {
++	if ((LOGICAL_PAD || LOGICAL_HPAD || ZOOMED) && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+ 		SDL_FRect dst = {(float)s_leftpad, (float)s_toppad, 0, 0};
++		SDL_FRect src;
+ 		SDL_GetTextureSize(s_texture, &dst.w, &dst.h);
+-		SDL_RenderTexture(s_renderer, s_texture, NULL, &dst);
++		zoomrect((int)dst.w, (int)dst.h, &src.x, &src.y, &src.w, &src.h);
++		SDL_RenderTexture(s_renderer, s_texture, &src, &dst);
+ 	} else {
+ 		SDL_RenderTexture(s_renderer, s_texture, NULL, NULL);
+ 	}
+ #else
+-	if ((LOGICAL_PAD || LOGICAL_HPAD) && !(scrnmode & SCRNMODE_ROTATEMASK)) {
++	if ((LOGICAL_PAD || LOGICAL_HPAD || ZOOMED) && !(scrnmode & SCRNMODE_ROTATEMASK)) {
+ 		SDL_Rect dst = {s_leftpad, s_toppad, 0, 0};
++		SDL_Rect src;
++		float zx, zy, zw, zh;
+ 		SDL_QueryTexture(s_texture, NULL, NULL, &dst.w, &dst.h);
+-		SDL_RenderCopy(s_renderer, s_texture, NULL, &dst);
++		zoomrect(dst.w, dst.h, &zx, &zy, &zw, &zh);
++		src.x = (int)zx;
++		src.y = (int)zy;
++		src.w = (int)zw;
++		src.h = (int)zh;
++		SDL_RenderCopy(s_renderer, s_texture, &src, &dst);
+ 	} else {
+ 		SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
+ 	}
+@@ -794,6 +818,16 @@
+ 	if (pad != s_toppad) {
+ 		s_toppad = pad;
+ 		applypad();
++	}
++}
++
++void scrnmng_setzoom(float zoom, float x, float y)
++{
++	if (zoom != s_zoom || x != s_zoomx || y != s_zoomy) {
++		s_zoom = zoom;
++		s_zoomx = x;
++		s_zoomy = y;
++		scrnmng_update();
+ 	}
+ }
+ 
+@@ -817,12 +851,16 @@
+ 	}
+ #if defined(NP2_IOS_KEYBAR)
+ 	if (!(scrnmode & SCRNMODE_ROTATEMASK)) {
++		float zx, zy, zw, zh;
++		zoomrect(scrnmng.width, scrnmng.height, &zx, &zy, &zw, &zh);
+ 		if (event->type == SDL_EVENT_MOUSE_MOTION) {
+-			event->motion.x -= s_leftpad;
+-			event->motion.y -= s_toppad;
++			event->motion.x = zx + (event->motion.x - s_leftpad) * zw / scrnmng.width;
++			event->motion.y = zy + (event->motion.y - s_toppad) * zh / scrnmng.height;
++			event->motion.xrel *= zw / scrnmng.width;
++			event->motion.yrel *= zh / scrnmng.height;
+ 		} else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN || event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
+-			event->button.x -= s_leftpad;
+-			event->button.y -= s_toppad;
++			event->button.x = zx + (event->button.x - s_leftpad) * zw / scrnmng.width;
++			event->button.y = zy + (event->button.y - s_toppad) * zh / scrnmng.height;
+ 		}
+ 	}
+ #endif
+@@ -833,12 +871,14 @@
+ void scrnmng_converttoscreen(SDL_Event *event)
+ {
+ 	if (!(scrnmode & SCRNMODE_ROTATEMASK)) {
++		float zx, zy, zw, zh;
++		zoomrect(scrnmng.width, scrnmng.height, &zx, &zy, &zw, &zh);
+ 		if (event->type == SDL_MOUSEMOTION) {
+-			event->motion.x -= s_leftpad;
+-			event->motion.y -= s_toppad;
++			event->motion.x = (Sint32)(zx + (event->motion.x - s_leftpad) * zw / scrnmng.width);
++			event->motion.y = (Sint32)(zy + (event->motion.y - s_toppad) * zh / scrnmng.height);
+ 		} else if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP) {
+-			event->button.x -= s_leftpad;
+-			event->button.y -= s_toppad;
++			event->button.x = (Sint32)(zx + (event->button.x - s_leftpad) * zw / scrnmng.width);
++			event->button.y = (Sint32)(zy + (event->button.y - s_toppad) * zh / scrnmng.height);
+ 		}
+ 	}
+ }
+diff --git a/sdl/scrnmng.h b/sdl/scrnmng.h
+--- a/sdl/scrnmng.h
++++ b/sdl/scrnmng.h
+@@ -101,6 +101,9 @@
+ void scrnmng_setbottompad(int pad);
+ void scrnmng_settoppad(int pad);
+ void scrnmng_setsidepads(int left, int right);
++/* Shows the screen zoom times larger, centered on (x, y) in its pixels as
++ * far as it can be; 1 shows all of it. Touches are mapped likewise. */
++void scrnmng_setzoom(float zoom, float x, float y);
+ #endif
+ #if USE_SDL >= 3 || defined(NP2_IOS_KEYBAR)
+ void scrnmng_converttoscreen(SDL_Event *event);

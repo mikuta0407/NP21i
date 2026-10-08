@@ -6,7 +6,7 @@
  * midi_input_latency_ms  -> cmmidi_midiin_latency_ms (default 20, 0 = deliver immediately)
  * keyboard_layout        -> keyinput_setlayout() (0 = JIS, 1 = US; default JIS)
  * run_in_background, resume_state -> lifecycle.m; show_speed_warning, screen_keyboard,
- * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape, mouse_lock -> keybar.m;
+ * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape, mouse_lock, pinch_zoom -> keybar.m;
  * gamepad_mode, gamepad_map -> gamepad.m
  *
  * The environment variables NP2_MIDI_LATENCY_MS / NP2_MIDIIN_LATENCY_MS
@@ -39,6 +39,7 @@ NSString *const kSettingLandscapeFold = @"fold_landscape";
 NSString *const kSettingGamepad = @"gamepad_mode";
 NSString *const kSettingGamepadMap = @"gamepad_map";
 NSString *const kSettingMouseLock = @"mouse_lock";
+NSString *const kSettingPinchZoom = @"pinch_zoom";
 NSString *const kSettingTrackpad = @"trackpad_mouse";
 NSString *const kSettingTrackpadSpeed = @"trackpad_speed";
 
@@ -124,6 +125,11 @@ BOOL settings_mouselock(void)
 	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingMouseLock];
 }
 
+BOOL settings_pinchzoom(void)
+{
+	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingPinchZoom];
+}
+
 BOOL settings_trackpad(void)
 {
 	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingTrackpad];
@@ -176,7 +182,7 @@ void settings_initialize(void)
 	[[NSUserDefaults standardUserDefaults] registerDefaults:@{ kSettingMidiOutputLatency: @20, kSettingMidiInputLatency: @20, kSettingKeyboardLayout: @(KEYLAYOUT_JIS),
 		kSettingRunInBackground: @YES, kSettingResume: @YES, kSettingShowSpeed: @YES,
 		kSettingScreenKeyboard: @"pc98", kSettingTrackpadSpeed: @100,
-		kSettingKeyHaptics: @YES, kSettingKeyPreview: @YES, kSettingMouseLock: @YES }];
+		kSettingKeyHaptics: @YES, kSettingKeyPreview: @YES, kSettingMouseLock: @YES, kSettingPinchZoom: @YES }];
 	apply_settings();
 	/* Changes made in the Settings app arrive while the app is in the
 	 * background, so re-read them when it becomes active again. */

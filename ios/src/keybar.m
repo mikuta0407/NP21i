@@ -228,7 +228,7 @@ static void setup_text_field(UIViewController *controller);
 @implementation NP2KeyButton
 @end
 
-@interface NP2KeyBar : UIView <UIDocumentPickerDelegate>
+@interface NP2KeyBar : UIView <UIDocumentPickerDelegate, UIGestureRecognizerDelegate>
 - (void)refreshModifiers;
 - (UIViewController *)hostController;
 - (void)pickFileInto:(NSString *)dir handler:(void (^)(NSString *path))handler;
@@ -259,6 +259,12 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	NP2TrackpadView *_trackpad;	/* under everything, over SDL's view */
 	BOOL _pointerLocked;		/* a connected mouse moves the PC-98 mouse by travel */
 	UIButton *_recordButton;	/* shown while recording (video, MIDI): stops it */
+	CGRect _screenRect;			/* where the PC-98 screen is, unzoomed */
+	CGFloat _pixelScale;		/* points per PC-98 pixel, unzoomed */
+	CGFloat _zoom;				/* pinched in (1: all of the screen) */
+	CGPoint _zoomCenter;		/* in PC-98 pixels */
+	CGFloat _pinchStartZoom;
+	BOOL _gesturesAdded;
 	UIButton *_hideButton;
 	UIButton *_showButton;
 	UILabel *_speedLabel;
@@ -350,6 +356,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	_speedLabel.hidden = YES;
 	[self addSubview:_speedLabel];
 
+	_zoom = 1;
 	_recordButton = [UIButton buttonWithType:UIButtonTypeCustom];
 	_recordButton.titleLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightSemibold];
 	[_recordButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
@@ -709,6 +716,112 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	[[self hostController] presentViewController:alert animated:YES completion:nil];
 }
 
+// ---- zoom (two fingers on the screen)
+
+- (void)setScreenRect:(CGRect)rect scale:(CGFloat)scale
+{
+	_screenRect = rect;
+	_pixelScale = scale;
+	_trackpad.pointsPerPixel = scale * _zoom;
+}
+
+- (void)setZoom:(CGFloat)zoom center:(CGPoint)center
+{
+	CGSize screen = _screenSize;
+	if (zoom < 1.05 || screen.width <= 0) {
+		zoom = 1;
+		center = CGPointMake(screen.width / 2, screen.height / 2);
+	}
+	zoom = MIN(zoom, 6);
+	CGFloat halfW = screen.width / zoom / 2, halfH = screen.height / zoom / 2;
+	center.x = MIN(MAX(center.x, halfW), screen.width - halfW);
+	center.y = MIN(MAX(center.y, halfH), screen.height - halfH);
+	_zoom = zoom;
+	_zoomCenter = center;
+	scrnmng_setzoom((float)zoom, (float)center.x, (float)center.y);
+	_trackpad.pointsPerPixel = _pixelScale * _zoom;
+}
+
+/* The PC-98 pixel at a point of the screen now, and where along it that is. */
+- (CGPoint)pixelAt:(CGPoint)point fraction:(CGPoint *)fraction
+{
+	CGPoint f = CGPointMake((point.x - _screenRect.origin.x) / MAX(_screenRect.size.width, 1),
+		(point.y - _screenRect.origin.y) / MAX(_screenRect.size.height, 1));
+	if (fraction) {
+		*fraction = f;
+	}
+	CGFloat w = _screenSize.width / _zoom, h = _screenSize.height / _zoom;
+	return CGPointMake(_zoomCenter.x - w / 2 + f.x * w, _zoomCenter.y - h / 2 + f.y * h);
+}
+
+- (void)pinched:(UIPinchGestureRecognizer *)pinch
+{
+	if (pinch.state == UIGestureRecognizerStateBegan) {
+		_pinchStartZoom = _zoom;
+		if (_zoom <= 1) {
+			_zoomCenter = CGPointMake(_screenSize.width / 2, _screenSize.height / 2);
+		}
+	}
+	if (pinch.numberOfTouches < 2 && pinch.state == UIGestureRecognizerStateChanged) {
+		return;
+	}
+	/* the pixel between the fingers stays there */
+	CGPoint fraction;
+	CGPoint pixel = [self pixelAt:[pinch locationInView:self] fraction:&fraction];
+	CGFloat zoom = MAX(_pinchStartZoom * pinch.scale, 1);
+	CGFloat w = _screenSize.width / zoom, h = _screenSize.height / zoom;
+	[self setZoom:zoom center:CGPointMake(pixel.x - fraction.x * w + w / 2, pixel.y - fraction.y * h + h / 2)];
+}
+
+- (void)panned:(UIPanGestureRecognizer *)pan
+{
+	CGPoint t = [pan translationInView:self];
+	[pan setTranslation:CGPointZero inView:self];
+	CGFloat perPoint = 1 / MAX(_pixelScale * _zoom, 0.01);
+	[self setZoom:_zoom center:CGPointMake(_zoomCenter.x - t.x * perPoint, _zoomCenter.y - t.y * perPoint)];
+}
+
+- (void)didMoveToSuperview
+{
+	[super didMoveToSuperview];
+	if (self.superview && !_gesturesAdded) {
+		_gesturesAdded = YES;
+		/* on SDL's view, which gets the touches on the screen (or the
+		 * trackpad, a subview of this) */
+		UIPinchGestureRecognizer *pinch = [[UIPinchGestureRecognizer alloc] initWithTarget:self action:@selector(pinched:)];
+		pinch.delegate = self;
+		[self.superview addGestureRecognizer:pinch];
+		UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panned:)];
+		pan.minimumNumberOfTouches = 2;
+		pan.maximumNumberOfTouches = 2;
+		pan.delegate = self;
+		[self.superview addGestureRecognizer:pan];
+	}
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch
+{
+	if (!settings_pinchzoom() || menuvram != NULL) {
+		return NO;
+	}
+	/* only on the screen: not the bar, keyboard or cross keys */
+	UIView *hit = [self hitTest:[touch locationInView:self] withEvent:nil];
+	return hit == nil || hit == _trackpad;
+}
+
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer
+{
+	if ([recognizer isKindOfClass:[UIPanGestureRecognizer class]]) {
+		return _zoom > 1;
+	}
+	return YES;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other
+{
+	return YES;
+}
+
 - (void)hingeChanged:(NP2HingePosture)posture
 {
 	if (posture != _hinge) {
@@ -859,6 +972,9 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	[self setNeedsLayout];		/* the layout when folded */
 	_screenKeyboard.hapticFeedback = settings_keyhaptics();
 	_screenKeyboard.keyPreview = settings_keypreview();
+	if (!settings_pinchzoom() && _zoom > 1) {
+		[self setZoom:1 center:CGPointZero];
+	}
 	if (_screenKeyboardShown) {
 		NP2KeyboardLayout *layout = [NP2KeyboardLayout layoutWithIdentifier:settings_screenkeyboard()];
 		if (layout == nil) {
@@ -937,7 +1053,16 @@ static UIImage *slot_thumbnail(NSInteger slot)
 		completion(@[ [weakSelf slotsMenu] ]);
 	}];
 	UIDeferredMenuElement *capture = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
-		completion(@[ [weakSelf captureMenu] ]);
+		NP2KeyBar *bar = weakSelf;
+		NSMutableArray<UIMenuElement *> *items = [NSMutableArray arrayWithObject:[bar captureMenu]];
+		if (bar && bar->_zoom > 1) {
+			[items addObject:[UIAction actionWithTitle:@"拡大を戻す" image:[UIImage systemImageNamed:@"arrow.down.right.and.arrow.up.left"]
+			                                identifier:nil handler:^(UIAction *a) {
+				(void)a;
+				[weakSelf setZoom:1 center:CGPointZero];
+			}]];
+		}
+		completion(items);
 	}];
 	UIDeferredMenuElement *trackpad = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
 		UIAction *action = [UIAction actionWithTitle:@"画面をタッチパッドにする" image:[UIImage systemImageNamed:@"rectangle.and.hand.point.up.left"]
@@ -1211,6 +1336,10 @@ static UIImage *slot_thumbnail(NSInteger slot)
 		sw = SCREEN_WIDTH;
 		sh = SCREEN_HEIGHT;
 	}
+	if ((sw != (int)_screenSize.width || sh != (int)_screenSize.height) && _zoom > 1) {
+		_screenSize = CGSizeMake(sw, sh);
+		[self setZoom:1 center:CGPointZero];		/* another screen mode */
+	}
 	_screenSize = CGSizeMake(sw, sh);
 	[self updateFold];
 	if (_screenKeyboardShown && (_fold == NP2FoldScreenLeft || _fold == NP2FoldScreenRight)) {
@@ -1285,7 +1414,8 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	scrnmng_setbottompad(pad);
 	CGFloat scale = MIN(viewW / sw, viewH / (sh + toppad + pad));
 	_trackpad.frame = bounds;
-	_trackpad.pointsPerPixel = scale;
+	[self setScreenRect:CGRectMake((viewW - sw * scale) / 2, (viewH - (sh + toppad + pad) * scale) / 2 + toppad * scale,
+		sw * scale, sh * scale) scale:scale];
 	CGFloat screenBottom = (viewH - (sh + toppad + pad) * scale) / 2 + (toppad + sh) * scale;
 	CGFloat bottomGap = viewH - screenBottom;
 
@@ -1372,7 +1502,8 @@ static UIImage *slot_thumbnail(NSInteger slot)
 	scrnmng_settoppad(top);
 	scrnmng_setbottompad(MAX(0, totalH - (int)screen.height - top));
 	_trackpad.frame = bounds;
-	_trackpad.pointsPerPixel = scale;
+	[self setScreenRect:CGRectMake(originX + left * scale, originY + top * scale, screen.width * scale, screen.height * scale)
+	              scale:scale];
 
 	CGFloat barTop = MAX(safe.top, kGap);
 	CGFloat barHeight = _hidden ? 0 : kOverlayBarHeight;
@@ -1645,6 +1776,11 @@ static UIImage *slot_thumbnail(NSInteger slot)
 			NSLog(@"keybar: slot %ld check %d", (long)slot + 1, profile_checkslot(slot));
 			profile_loadslot(slot);
 		}
+	}
+	else if ([command hasPrefix:@"!zoom:"]) {
+		/* "!zoom:<zoom>/<x>/<y>" (x, y in PC-98 pixels) */
+		NSArray<NSString *> *args = [[command substringFromIndex:6] componentsSeparatedByString:@"/"];
+		[self setZoom:args[0].doubleValue center:CGPointMake((args.count > 1) ? args[1].doubleValue : 0, (args.count > 2) ? args[2].doubleValue : 0)];
 	}
 	else if ([command hasPrefix:@"!profile:"]) {
 		/* "!profile:new:<name>:<copy|share|none>", "!profile:switch:<name>",
