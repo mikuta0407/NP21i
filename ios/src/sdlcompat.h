@@ -109,3 +109,55 @@ static inline void np21_pushkey(SDL_Scancode sc, int down)
 #endif
 	SDL_PushEvent(&e);
 }
+
+/* Pushes a left button mouse event at (x, y) in window points, as if from a
+ * touch (testing): moved (0), pressed (1) or released (2). */
+static inline void np21_pushmouse(int what, float x, float y)
+{
+	SDL_Event e;
+	SDL_zero(e);
+#if USE_SDL >= 3
+	int count = 0;
+	SDL_Window **windows = SDL_GetWindows(&count);
+	SDL_WindowID window = (windows && count > 0) ? SDL_GetWindowID(windows[0]) : 0;
+	SDL_free(windows);
+	if (what == 0) {
+		e.type = SDL_EVENT_MOUSE_MOTION;
+		e.motion.windowID = window;
+		e.motion.x = x;
+		e.motion.y = y;
+	}
+	else {
+		e.type = (what == 1) ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+		e.button.windowID = window;
+		e.button.button = SDL_BUTTON_LEFT;
+		e.button.down = (what == 1);
+		e.button.clicks = 1;
+		e.button.x = x;
+		e.button.y = y;
+	}
+#else
+	Uint32 window = 0;
+	for (Uint32 id = 1; id < 8 && window == 0; id++) {
+		if (SDL_GetWindowFromID(id)) {
+			window = id;
+		}
+	}
+	if (what == 0) {
+		e.type = SDL_MOUSEMOTION;
+		e.motion.windowID = window;
+		e.motion.x = (Sint32)x;
+		e.motion.y = (Sint32)y;
+	}
+	else {
+		e.type = (what == 1) ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+		e.button.windowID = window;
+		e.button.button = SDL_BUTTON_LEFT;
+		e.button.state = (what == 1) ? SDL_PRESSED : SDL_RELEASED;
+		e.button.clicks = 1;
+		e.button.x = (Sint32)x;
+		e.button.y = (Sint32)y;
+	}
+#endif
+	SDL_PushEvent(&e);
+}

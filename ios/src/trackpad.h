@@ -14,7 +14,8 @@
  *
  * - one finger moves the mouse, by travel rather than position;
  * - a tap is a left click, a two-finger tap a right click;
- * - a finger held still and then moved drags with the left button.
+ * - a finger held still and then moved drags with the left button, and so
+ *   does a touch moved right after a tap.
  *
  * The NP2 menu still takes touches where they are. */
 @interface NP2TrackpadView : UIView
@@ -26,5 +27,11 @@
 
 /* Lets go of a drag's button (when hidden or turned off). */
 - (void)reset;
+
+/* Testing: strokes made of finger samples, as UIKit's would be.
+ * "!padmove:<dx>/<dy>[/<s>]", "!padtap", "!paddoubletap", "!padtap2",
+ * "!padholddrag:<dx>/<dy>[/<s>]", "!padtapdrag:<dx>/<dy>[/<s>]" (points;
+ * "," separates the steps of a debug key script). */
+- (BOOL)debugCommand:(NSString *)command;
 
 @end

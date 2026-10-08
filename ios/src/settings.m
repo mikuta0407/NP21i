@@ -6,7 +6,7 @@
  * midi_input_latency_ms  -> cmmidi_midiin_latency_ms (default 20, 0 = deliver immediately)
  * keyboard_layout        -> keyinput_setlayout() (0 = JIS, 1 = US; default JIS)
  * run_in_background, resume_state -> lifecycle.m; show_speed_warning, screen_keyboard,
- * trackpad_mouse, trackpad_speed -> keybar.m
+ * trackpad_mouse, trackpad_speed, key_haptics, key_preview -> keybar.m
  *
  * The environment variables NP2_MIDI_LATENCY_MS / NP2_MIDIIN_LATENCY_MS
  * override the settings (for testing with simctl: SIMCTL_CHILD_NP2_...=0).
@@ -32,6 +32,8 @@ NSString *const kSettingResume = @"resume_state";
 NSString *const kSettingShowSpeed = @"show_speed_warning";
 NSString *const kSettingScreenKeyboard = @"screen_keyboard";
 NSString *const kScreenKeyboardSystem = @"system";
+NSString *const kSettingKeyHaptics = @"key_haptics";
+NSString *const kSettingKeyPreview = @"key_preview";
 NSString *const kSettingTrackpad = @"trackpad_mouse";
 NSString *const kSettingTrackpadSpeed = @"trackpad_speed";
 
@@ -80,6 +82,16 @@ BOOL settings_resume(void)
 BOOL settings_showspeed(void)
 {
 	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingShowSpeed];
+}
+
+BOOL settings_keyhaptics(void)
+{
+	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingKeyHaptics];
+}
+
+BOOL settings_keypreview(void)
+{
+	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingKeyPreview];
 }
 
 BOOL settings_trackpad(void)
@@ -133,7 +145,8 @@ void settings_initialize(void)
 	 * opens the Settings app, so register them here as well. */
 	[[NSUserDefaults standardUserDefaults] registerDefaults:@{ kSettingMidiOutputLatency: @20, kSettingMidiInputLatency: @20, kSettingKeyboardLayout: @(KEYLAYOUT_JIS),
 		kSettingRunInBackground: @YES, kSettingResume: @YES, kSettingShowSpeed: @YES,
-		kSettingScreenKeyboard: @"pc98", kSettingTrackpadSpeed: @100 }];
+		kSettingScreenKeyboard: @"pc98", kSettingTrackpadSpeed: @100,
+		kSettingKeyHaptics: @YES, kSettingKeyPreview: @YES }];
 	apply_settings();
 	/* Changes made in the Settings app arrive while the app is in the
 	 * background, so re-read them when it becomes active again. */

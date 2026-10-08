@@ -40,6 +40,8 @@ typedef NS_ENUM(NSInteger, CapState) {
 @property (nonatomic) BOOL kana;
 @property (nonatomic) NSInteger touches;
 @property (nonatomic, copy) void (^onActivate)(NP2KeyCap *cap);
+/* What the cap shows now (kana when KANA is on). */
+- (NSString *)shownLabel;
 @end
 
 @implementation NP2KeyCap {
@@ -105,6 +107,11 @@ typedef NS_ENUM(NSInteger, CapState) {
 		[self applyLabels];
 		[self setNeedsLayout];
 	}
+}
+
+- (NSString *)shownLabel
+{
+	return _label.text;
 }
 
 - (void)applyLabels
@@ -207,6 +214,7 @@ typedef NS_ENUM(NSInteger, CapState) {
 	int _modifierCount[0x80];	/* fingers holding each modifier */
 	BOOL _modifierUsed[0x80];	/* another key was pressed while it was held */
 	UIImpactFeedbackGenerator *_haptics;
+	NSMapTable<NP2KeyCap *, UIView *> *_previews;	/* shown above pressed keys */
 }
 
 - (instancetype)initWithLayout:(NP2KeyboardLayout *)layout
@@ -218,6 +226,9 @@ typedef NS_ENUM(NSInteger, CapState) {
 		self.accessibilityIdentifier = @"screen-keyboard";
 		_touches = [NSMapTable strongToStrongObjectsMapTable];
 		_haptics = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+		_previews = [NSMapTable strongToStrongObjectsMapTable];
+		_hapticFeedback = YES;
+		_keyPreview = YES;
 		_tabs = [[UISegmentedControl alloc] init];
 		_tabs.selectedSegmentTintColor = [UIColor colorWithWhite:0.40 alpha:1];
 		[_tabs setTitleTextAttributes:@{ NSForegroundColorAttributeName: UIColor.whiteColor } forState:UIControlStateNormal];
@@ -529,8 +540,11 @@ typedef NS_ENUM(NSInteger, CapState) {
 			return NO;
 	}
 	cap.touches++;
-	[_haptics impactOccurred];
+	if (_hapticFeedback) {
+		[_haptics impactOccurred];
+	}
 	[self refreshStates];
+	[self showPreview:cap];
 	return YES;
 }
 
@@ -538,6 +552,10 @@ typedef NS_ENUM(NSInteger, CapState) {
 {
 	NP2Key *key = cap.key;
 	cap.touches = MAX(cap.touches - 1, 0);
+	if (cap.touches == 0) {
+		[[_previews objectForKey:cap] removeFromSuperview];
+		[_previews removeObjectForKey:cap];
+	}
 	if (key.kind == NP2KeyKindModifier) {
 		UINT8 code = (UINT8)(key.codes.firstObject.unsignedIntValue & 0x7f);
 		if (_modifierCount[code] > 0 && --_modifierCount[code] == 0) {
@@ -555,6 +573,45 @@ typedef NS_ENUM(NSInteger, CapState) {
 	[self refreshStates];
 }
 
+// ---- key preview
+
+/* A bubble a little wider than the key, above it, with the character it
+ * types (shifted while SHIFT is held); not for function or editing keys. */
+- (void)showPreview:(NP2KeyCap *)cap
+{
+	NP2Key *key = cap.key;
+	if (!_keyPreview || key.kind != NP2KeyKindKey || key.style != NP2KeyStyleNormal
+		|| [_previews objectForKey:cap] != nil) {
+		return;
+	}
+	NSString *text = cap.shownLabel;
+	if (keyinput_isactive(PC98KEY_SHIFT) && key.shiftedLabel && !cap.kana) {
+		text = key.shiftedLabel;
+	}
+	if (text.length == 0 || text.length > 2) {
+		return;
+	}
+	CGRect frame = cap.frame;
+	CGFloat width = MAX(frame.size.width * 1.4, 44);
+	CGFloat height = MIN(MAX(frame.size.height * 1.3, 48), 72);
+	CGRect bubble = CGRectMake(CGRectGetMidX(frame) - width / 2, CGRectGetMinY(frame) - height - 4, width, height);
+	/* inside the keyboard sideways; above it is fine (over the bar) */
+	bubble.origin.x = MIN(MAX(bubble.origin.x, 2), self.bounds.size.width - width - 2);
+	UILabel *label = [[UILabel alloc] initWithFrame:bubble];
+	label.text = text;
+	label.textAlignment = NSTextAlignmentCenter;
+	label.textColor = UIColor.blackColor;
+	label.font = [UIFont systemFontOfSize:height * 0.55 weight:UIFontWeightMedium];
+	label.adjustsFontSizeToFitWidth = YES;
+	label.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1];
+	label.layer.cornerRadius = 8;
+	label.layer.masksToBounds = YES;
+	label.userInteractionEnabled = NO;
+	label.isAccessibilityElement = NO;
+	[self addSubview:label];
+	[_previews setObject:label forKey:cap];
+}
+
 - (void)tapCap:(NP2KeyCap *)cap
 {
 	if ([self pressCap:cap]) {
@@ -567,6 +624,22 @@ typedef NS_ENUM(NSInteger, CapState) {
 	for (NP2KeyCap *cap in _caps) {
 		if (!cap.hidden && [cap.key.identifier isEqualToString:identifier]) {
 			[self tapCap:cap];
+			return YES;
+		}
+	}
+	return NO;
+}
+
+- (BOOL)holdKey:(NSString *)identifier seconds:(NSTimeInterval)seconds
+{
+	for (NP2KeyCap *cap in _caps) {
+		if (!cap.hidden && [cap.key.identifier isEqualToString:identifier]) {
+			if ([self pressCap:cap]) {
+				__weak NP2KeyboardView *weakSelf = self;
+				dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(seconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+					[weakSelf releaseCap:cap];
+				});
+			}
 			return YES;
 		}
 	}

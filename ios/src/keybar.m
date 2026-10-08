@@ -538,6 +538,8 @@ static void setup_text_field(UIViewController *controller);
 		[self bringSubviewToFront:_bar];
 	}
 	_screenKeyboard.layout = layout;
+	_screenKeyboard.hapticFeedback = settings_keyhaptics();
+	_screenKeyboard.keyPreview = settings_keypreview();
 	[self setScreenKeyboardShown:YES];
 }
 
@@ -601,6 +603,8 @@ static void setup_text_field(UIViewController *controller);
 {
 	_trackpad.hidden = !settings_trackpad();
 	_trackpad.speed = settings_trackpadspeed();
+	_screenKeyboard.hapticFeedback = settings_keyhaptics();
+	_screenKeyboard.keyPreview = settings_keypreview();
 	if (_screenKeyboardShown) {
 		NP2KeyboardLayout *layout = [NP2KeyboardLayout layoutWithIdentifier:settings_screenkeyboard()];
 		if (layout == nil) {
@@ -1233,8 +1237,38 @@ static void setup_text_field(UIViewController *controller);
 			NSLog(@"keybar: no key %@", identifier);
 		}
 	}
+	else if ([command hasPrefix:@"!kbdhold:"]) {
+		/* "!kbdhold:<key id>/<seconds>" */
+		NSArray<NSString *> *args = [[command substringFromIndex:9] componentsSeparatedByString:@"/"];
+		if (![_screenKeyboard holdKey:args[0] seconds:(args.count > 1) ? args[1].doubleValue : 1]) {
+			NSLog(@"keybar: no key %@", args[0]);
+		}
+	}
 	else if ([command hasPrefix:@"!kbdblock:"]) {
 		[_screenKeyboard showBlock:[command substringFromIndex:10].integerValue];
+	}
+	else if ([command hasPrefix:@"!click:"]) {
+		/* "!click:<x>/<y>": a touch at (x, y) points on the SDL view, for
+		 * the NP2 menu; also shows where it was */
+		NSArray<NSString *> *xy = [[command substringFromIndex:7] componentsSeparatedByString:@"/"];
+		float x = xy[0].floatValue, y = (xy.count > 1) ? xy[1].floatValue : 0;
+		np21_pushmouse(0, x, y);
+		np21_pushmouse(1, x, y);
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+			np21_pushmouse(2, x, y);
+		});
+		UIView *mark = [[UIView alloc] initWithFrame:CGRectMake(x - 3, y - 3, 6, 6)];
+		mark.backgroundColor = UIColor.systemRedColor;
+		mark.userInteractionEnabled = NO;
+		[self addSubview:mark];
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+			[mark removeFromSuperview];
+		});
+	}
+	else if ([command hasPrefix:@"!pad"]) {
+		if (![_trackpad debugCommand:command]) {
+			NSLog(@"keybar: unknown command %@", command);
+		}
 	}
 	else if ([command hasPrefix:@"!trackpad:"]) {
 		[[NSUserDefaults standardUserDefaults] setBool:[[command substringFromIndex:10] isEqualToString:@"on"] forKey:kSettingTrackpad];

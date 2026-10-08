@@ -19,6 +19,8 @@ extern NSString *const kSettingResume;				/* BOOL */
 extern NSString *const kSettingShowSpeed;			/* BOOL */
 extern NSString *const kSettingScreenKeyboard;		/* kScreenKeyboardSystem or an NP2KeyboardLayout identifier */
 extern NSString *const kScreenKeyboardSystem;		/* the iOS software keyboard */
+extern NSString *const kSettingKeyHaptics;			/* BOOL: the app's keyboard taps back */
+extern NSString *const kSettingKeyPreview;			/* BOOL: the app's keyboard shows pressed characters larger */
 extern NSString *const kSettingTrackpad;			/* BOOL: touches on the screen are a trackpad's */
 extern NSString *const kSettingTrackpadSpeed;		/* % of a finger's travel, 100 = alike */
 
@@ -42,6 +44,8 @@ void settings_initialize(void);
 BOOL settings_runinbackground(void);
 BOOL settings_resume(void);
 BOOL settings_showspeed(void);
+BOOL settings_keyhaptics(void);
+BOOL settings_keypreview(void);
 BOOL settings_trackpad(void);
 /* The trackpad speed as a factor (1 = the pointer travels as the finger). */
 double settings_trackpadspeed(void);

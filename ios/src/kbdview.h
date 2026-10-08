@@ -26,6 +26,12 @@ NS_ASSUME_NONNULL_BEGIN
  * than wide, and the keys are centered in what is left. */
 @property (nonatomic) BOOL fillsHeight;
 
+/* A light tap felt on each key press (default YES). */
+@property (nonatomic) BOOL hapticFeedback;
+/* Character keys show what they type, larger, above the finger while
+ * pressed (default YES). */
+@property (nonatomic) BOOL keyPreview;
+
 - (instancetype)initWithLayout:(NP2KeyboardLayout *)layout;
 
 /* The height the keyboard wants for a width, not more than maxHeight. */
@@ -40,6 +46,8 @@ NS_ASSUME_NONNULL_BEGIN
 /* Testing: taps the key with this identifier ("1e", "ret", "shift", ...),
  * on the block shown. */
 - (BOOL)tapKey:(NSString *)identifier;
+/* Testing: holds it down that long. */
+- (BOOL)holdKey:(NSString *)identifier seconds:(NSTimeInterval)seconds;
 /* Testing: shows a block when they are shown one at a time. */
 - (void)showBlock:(NSInteger)index;
 

@@ -482,7 +482,7 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもので、iOS のキーボードは文字どおりに入力します。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。", @[
+	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもので、iOS のキーボードは文字どおりに入力します。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。振動と文字の大きな表示は、PC-98 キーボードを押したときのものです。長押しで連続入力は、押し続けたキーを 0.5 秒後から繰り返します（NP2 メニューの Key-repeat と同じ設定です）。", @[
 		detail_row(@"画面のキーボード", ^NSString *{
 			return settings_screenkeyboardtitle(settings_screenkeyboard());
 		}, ^(UIViewController *c) {
@@ -497,6 +497,16 @@ static NSArray<NP2Section *> *settings_sections(void)
 			}, ^(NSInteger index) {
 				[defaults setObject:identifiers[(NSUInteger)index] forKey:kSettingScreenKeyboard];
 			}) animated:YES];
+		}),
+		toggle_row(@"キーを押したときに振動", ^BOOL { return settings_keyhaptics(); }, ^(BOOL on) {
+			[defaults setBool:on forKey:kSettingKeyHaptics];
+		}),
+		toggle_row(@"押した文字を大きく表示", ^BOOL { return settings_keypreview(); }, ^(BOOL on) {
+			[defaults setBool:on forKey:kSettingKeyPreview];
+		}),
+		toggle_row(@"長押しで連続入力", ^BOOL { return np2cfg.keyrepeat_enable != 0; }, ^(BOOL on) {
+			np2cfg.keyrepeat_enable = on ? 1 : 0;
+			settings_savenp2cfg();
 		}),
 		detail_row(@"ハードウェアキーボードの配列", ^NSString *{
 			return ([defaults integerForKey:kSettingKeyboardLayout] == KEYLAYOUT_US) ? @"US" : @"JIS";
