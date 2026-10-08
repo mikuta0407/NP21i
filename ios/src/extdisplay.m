@@ -16,6 +16,18 @@
 #import <UIKit/UIKit.h>
 
 NSNotificationName const NP2ExternalDisplayChanged = @"NP2ExternalDisplayChanged";
+NSString *const kSettingExternalDisplay = @"external_display";
+
+NP2ExternalDisplayMode extdisplay_mode(void)
+{
+	return ([[NSUserDefaults standardUserDefaults] integerForKey:kSettingExternalDisplay] == NP2ExternalDisplayMirror)
+		? NP2ExternalDisplayMirror : NP2ExternalDisplayScreen;
+}
+
+NSArray<NSString *> *extdisplay_modes(void)
+{
+	return @[ @"PC-98 の画面だけ", @"ミラーリング" ];
+}
 
 @interface NP2ExternalScreenController : UIViewController
 @end
@@ -116,11 +128,12 @@ static void changed(NSInteger delta)
 
 @end
 
-@implementation NP2ExternalSceneDelegate
+@implementation NP2ExternalSceneDelegate {
+	BOOL _showing;		/* counted in s_connected */
+}
 
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions
 {
-	(void)session;
 	(void)connectionOptions;
 	if (![scene isKindOfClass:[UIWindowScene class]]) {
 		return;
@@ -128,17 +141,34 @@ static void changed(NSInteger delta)
 	NSLog(@"extdisplay: connected (%@)", session.role);
 	self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
 	self.window.rootViewController = [NP2ExternalScreenController new];
-	self.window.hidden = NO;
-	changed(1);
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(apply)
+	                                             name:NSUserDefaultsDidChangeNotification object:nil];
+	[self apply];
+}
+
+/* Shows the window, or hides it to let iOS mirror. */
+- (void)apply
+{
+	BOOL show = (self.window != nil) && extdisplay_mode() == NP2ExternalDisplayScreen;
+	if (show == _showing) {
+		return;
+	}
+	_showing = show;
+	self.window.hidden = !show;
+	changed(show ? 1 : -1);
 }
 
 - (void)sceneDidDisconnect:(UIScene *)scene
 {
 	(void)scene;
 	NSLog(@"extdisplay: disconnected");
+	[[NSNotificationCenter defaultCenter] removeObserver:self];
 	self.window.hidden = YES;
 	self.window = nil;
-	changed(-1);
+	if (_showing) {
+		_showing = NO;
+		changed(-1);
+	}
 }
 
 @end

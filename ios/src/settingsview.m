@@ -14,6 +14,7 @@
 #include "keybar.h"
 #include "midiport.h"
 #include "synth.h"
+#include "extdisplay.h"
 #include "diskedit.h"
 #include "lifecycle.h"
 #include "profile.h"
@@ -657,6 +658,7 @@ static UIViewController *help_screen(void)
 			topic(@"外部ディスプレイ", @[
 				@"テレビやモニタをつなぐ（または AirPlay で画面を送る）と、PC-98 の画面が大きく映ります。見え方は 設定 →「画面」と同じです。",
 				@"つないでいる間、本体の画面はタッチパッドとして働きます（指でなぞるとマウスが動き、タップでクリック）。キーボードはキーバーから出せます。",
+				@"設定 →「画面」→「外部ディスプレイ」で「ミラーリング」にすると、本体の画面をそのまま映します。",
 			]),
 			topic(@"ゲームコントローラとマウス", @[
 				@"ゲームコントローラの十字キーは矢印キー・テンキー・ジョイスティック端子から選べ、ボタンは 設定 →「ボタンの割り当て」で好きなキーにできます。",
@@ -1121,6 +1123,15 @@ static NSArray<NP2Section *> *settings_sections(void)
 				return settings_screenstyle();
 			}, ^(NSInteger index) {
 				[defaults setInteger:index forKey:kSettingScreenStyle];
+			}) animated:YES];
+		}),
+		detail_row(@"外部ディスプレイ", ^NSString *{
+			return extdisplay_modes()[(NSUInteger)extdisplay_mode()];
+		}, ^(UIViewController *c) {
+			[c.navigationController pushViewController:choice_screen(@"外部ディスプレイ", @"テレビやモニタをつないだとき（AirPlay も）に映すものです。「PC-98 の画面だけ」は PC-98 の画面を大きく映し、本体の画面はタッチパッドになります。「ミラーリング」は本体の画面（キーバーやキーボードも）をそのまま映します。つないだまま切り替えられます。", extdisplay_modes(), ^NSInteger {
+				return extdisplay_mode();
+			}, ^(NSInteger index) {
+				[defaults setInteger:index forKey:kSettingExternalDisplay];
 			}) animated:YES];
 		}),
 	])];
