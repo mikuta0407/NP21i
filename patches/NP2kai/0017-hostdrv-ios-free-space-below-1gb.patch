@@ -1,0 +1,38 @@
+diff --git a/generic/hostdrv.c b/generic/hostdrv.c
+index 8708af4..cd5ab4d 100755
+--- a/generic/hostdrv.c
++++ b/generic/hostdrv.c
+@@ -16,6 +16,9 @@
+ #include	<generic/hostdrv.h>
+ #include	<generic/hostdrvs.h>
+ #include	"hostdrv.tbl"
++#if defined(NP2_IOS_KEYBAR)
++#include	<sys/statvfs.h>
++#endif
+ 
+ // 性能上最適化で優先しない方がいいコードなのでわざと別セグメントに置く
+ #pragma code_seg(".MISCCODE")
+@@ -951,7 +954,23 @@ static void get_diskspace(INTRST intrst)
+ 	STOREINTELWORD(intrst->r.w.ax, 0xf840);
+ 	STOREINTELWORD(intrst->r.w.bx, 0x8000);
+ 	STOREINTELWORD(intrst->r.w.cx, 0x0200);
++#if defined(NP2_IOS_KEYBAR)
++	{
++		/* The host's free space in 32KB clusters, at most 999,948,288 bytes:
++		 * programs that show it in 9 digits (Recomposer) cut off a 1GB value. */
++		struct statvfs st;
++		UINT32 clusters = 30516;
++		if (statvfs(".", &st) == 0) {
++			UINT64 avail = (UINT64)st.f_bavail * st.f_frsize / 0x8000;
++			if (avail < clusters) {
++				clusters = (UINT32)avail;
++			}
++		}
++		STOREINTELWORD(intrst->r.w.dx, clusters);
++	}
++#else
+ 	STOREINTELWORD(intrst->r.w.dx, 0x8000);
++#endif
+ }
+ 
+ /* 0E */
