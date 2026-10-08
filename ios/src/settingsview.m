@@ -930,6 +930,63 @@ void settingsview_presenthelp(UIViewController *host)
 
 @end
 
+// ---- volumes
+
+static UIViewController *volume_screen(void)
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+	return [[NP2TableViewController alloc] initWithTitle:@"音量" build:^NSArray<NP2Section *> *{
+		/* the sound generators' volumes, 0-128 in np2cfg (np21kai.cfg) */
+		NP2Row *(^level)(NSString *, UINT8 *) = ^NP2Row *(NSString *title, UINT8 *value) {
+			return slider_row(title, 0, 128, ^float { return *value; }, ^(float v, BOOL done) {
+				*value = (UINT8)lroundf(v);
+				settings_applyvolumes();
+				if (done) {
+					settings_savenp2cfg();
+				}
+			});
+		};
+		NSArray<NSString *> *beeps = @[ @"なし", @"小", @"中", @"大" ];
+		NP2Section *pc98 = section(@"PC-98", @"PC-98 の音源ごとの音量で、すぐに反映されます（マスター以外は環境ごと）。FM と SSG、リズムは FM 音源（PC-9801-26K / 86 など）、ADPCM は 86 ボードなどの ADPCM、PCM は 86 ボードの PCM です。外部 MIDI 機器の音量は変わりません（内蔵音源は下で）。", @[
+			slider_row(@"マスター", 0, 100, ^float { return np2cfg.vol_master; }, ^(float v, BOOL done) {
+				[defaults setInteger:lroundf(v) forKey:kSettingVolumeMaster];
+			}),
+			level(@"FM", &np2cfg.vol_fm),
+			level(@"SSG", &np2cfg.vol_ssg),
+			level(@"リズム", &np2cfg.vol_rhythm),
+			level(@"ADPCM", &np2cfg.vol_adpcm),
+			level(@"PCM", &np2cfg.vol_pcm),
+			detail_row(@"ビープ音", ^NSString *{ return beeps[MIN(np2cfg.BEEP_VOL & 3, 3)]; }, ^(UIViewController *c) {
+				[c.navigationController pushViewController:choice_screen(@"ビープ音", nil, beeps, ^NSInteger {
+					return np2cfg.BEEP_VOL & 3;
+				}, ^(NSInteger index) {
+					np2cfg.BEEP_VOL = (UINT8)index;
+					settings_applyvolumes();
+					settings_savenp2cfg();
+				}) animated:YES];
+			}),
+			button_row(@"標準に戻す", ^(UIViewController *c) {
+				[defaults setInteger:100 forKey:kSettingVolumeMaster];
+				[defaults setInteger:100 forKey:kSettingSynthVolume];
+				np2cfg.vol_fm = np2cfg.vol_ssg = np2cfg.vol_rhythm = np2cfg.vol_adpcm = np2cfg.vol_pcm = 64;
+				np2cfg.BEEP_VOL = 3;
+				settings_applyvolumes();
+				settings_savenp2cfg();
+				[(NP2TableViewController *)c reload];
+			}),
+		]);
+		NP2Section *synth = section(@"内蔵音源", @"MIDI の出力先が「内蔵音源」のときの音量です。", @[
+			slider_row(@"内蔵音源", 0, 128, ^float {
+				return [defaults objectForKey:kSettingSynthVolume] ? (float)[defaults integerForKey:kSettingSynthVolume] : 100;
+			}, ^(float v, BOOL done) {
+				(void)done;
+				[defaults setInteger:lroundf(v) forKey:kSettingSynthVolume];
+			}),
+		]);
+		return @[ pc98, synth ];
+	}];
+}
+
 // ---- settings screen
 
 static NSArray<NP2Section *> *settings_sections(void)
@@ -958,16 +1015,9 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"内蔵音源", @"MIDI の出力先を「内蔵音源」にすると、外部の MIDI 機器なしで、アプリの中で鳴らします（PC-98 のほかの音と一緒に録音もできます）。音色は SoundFont（.sf2）か DLS（.dls）のファイルを追加して選びます。", @[
+	[sections addObject:section(@"内蔵音源", @"MIDI の出力先を「内蔵音源」にすると、外部の MIDI 機器なしで、アプリの中で鳴らします（PC-98 のほかの音と一緒に録音もできます）。音色は SoundFont（.sf2）か DLS（.dls）のファイルを追加して選びます。音量は「音量」にあります。", @[
 		detail_row(@"音色", ^NSString *{ return synth_bank() ?: @"なし"; }, ^(UIViewController *c) {
 			[c.navigationController pushViewController:bank_screen() animated:YES];
-		}),
-		slider_row(@"音量", 0, 128, ^float {
-			NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-			return [d objectForKey:kSettingSynthVolume] ? (float)[d integerForKey:kSettingSynthVolume] : 100;
-		}, ^(float v, BOOL done) {
-			(void)done;
-			[[NSUserDefaults standardUserDefaults] setInteger:lroundf(v) forKey:kSettingSynthVolume];
 		}),
 	])];
 
@@ -986,46 +1036,11 @@ static NSArray<NP2Section *> *settings_sections(void)
 		])];
 	}
 
-	{
-		/* the sound generators' volumes, 0-128 in np2cfg (np21kai.cfg) */
-		NP2Row *(^level)(NSString *, UINT8 *) = ^NP2Row *(NSString *title, UINT8 *value) {
-			return slider_row(title, 0, 128, ^float { return *value; }, ^(float v, BOOL done) {
-				*value = (UINT8)lroundf(v);
-				settings_applyvolumes();
-				if (done) {
-					settings_savenp2cfg();
-				}
-			});
-		};
-		NSArray<NSString *> *beeps = @[ @"なし", @"小", @"中", @"大" ];
-		[sections addObject:section(@"音量", @"PC-98 の音源ごとの音量で、すぐに反映されます（マスター以外は環境ごと）。FM と SSG、リズムは FM 音源（PC-9801-26K / 86 など）、ADPCM は 86 ボードなどの ADPCM、PCM は 86 ボードの PCM です。外部 MIDI 機器の音量は変わりません。", @[
-			slider_row(@"マスター", 0, 100, ^float { return np2cfg.vol_master; }, ^(float v, BOOL done) {
-				[defaults setInteger:lroundf(v) forKey:kSettingVolumeMaster];
-			}),
-			level(@"FM", &np2cfg.vol_fm),
-			level(@"SSG", &np2cfg.vol_ssg),
-			level(@"リズム", &np2cfg.vol_rhythm),
-			level(@"ADPCM", &np2cfg.vol_adpcm),
-			level(@"PCM", &np2cfg.vol_pcm),
-			detail_row(@"ビープ音", ^NSString *{ return beeps[MIN(np2cfg.BEEP_VOL & 3, 3)]; }, ^(UIViewController *c) {
-				[c.navigationController pushViewController:choice_screen(@"ビープ音", nil, beeps, ^NSInteger {
-					return np2cfg.BEEP_VOL & 3;
-				}, ^(NSInteger index) {
-					np2cfg.BEEP_VOL = (UINT8)index;
-					settings_applyvolumes();
-					settings_savenp2cfg();
-				}) animated:YES];
-			}),
-			button_row(@"標準に戻す", ^(UIViewController *c) {
-				[defaults setInteger:100 forKey:kSettingVolumeMaster];
-				np2cfg.vol_fm = np2cfg.vol_ssg = np2cfg.vol_rhythm = np2cfg.vol_adpcm = np2cfg.vol_pcm = 64;
-				np2cfg.BEEP_VOL = 3;
-				settings_applyvolumes();
-				settings_savenp2cfg();
-				[(NP2TableViewController *)c reload];
-			}),
-		])];
-	}
+	[sections addObject:section(nil, nil, @[
+		detail_row(@"音量", ^NSString *{ return [NSString stringWithFormat:@"マスター %u", (unsigned)np2cfg.vol_master]; }, ^(UIViewController *c) {
+			[c.navigationController pushViewController:volume_screen() animated:YES];
+		}),
+	])];
 
 	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもの、レコンポーザ（ステップ入力）は音名・音の長さ・編集コマンドを並べたもの、ゲーム用キーボードは十字キーと Z / X / スペース / リターンなどを大きくしたもので、iOS のキーボードは文字どおりに入力します。どれを使うかは環境ごとに覚えます。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。振動と文字の大きな表示は、PC-98 キーボードを押したときのものです。長押しで連続入力は、押し続けたキーを 0.5 秒後から繰り返します（NP2 メニューの Key-repeat と同じ設定です）。", @[
 		detail_row(@"画面のキーボード", ^NSString *{
