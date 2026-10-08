@@ -144,6 +144,28 @@ static void will_enter_foreground(void)
 	}
 }
 
+int lifecycle_savestateto(const char *path)
+{
+	OEMCHAR p[MAX_PATH];
+	file_cpyname(p, path, NELEMENTS(p));
+	return save_now(p);
+}
+
+int lifecycle_checkstate(const char *path)
+{
+	OEMCHAR p[MAX_PATH];
+	OEMCHAR info[1024];
+	file_cpyname(p, path, NELEMENTS(p));
+	return statsave_check(p, info, NELEMENTS(info));
+}
+
+int lifecycle_loadstatefrom(const char *path)
+{
+	OEMCHAR p[MAX_PATH];
+	file_cpyname(p, path, NELEMENTS(p));
+	return load_now(p);
+}
+
 void lifecycle_savestate(void)
 {
 	save_state();

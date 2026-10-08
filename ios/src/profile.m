@@ -15,6 +15,7 @@
 #include "compiler.h"
 #include "profile.h"
 #include "lifecycle.h"
+#include "capture.h"
 #include "midiport.h"
 #include "settings.h"
 #include "sdlcompat.h"
@@ -24,6 +25,8 @@
 #include <kbtrans.h>
 #include <fdd/diskdrv.h>
 #include <diskimage/fddfile.h>
+#include <statsave.h>
+#import <UIKit/UIKit.h>
 
 NSNotificationName const NP2ProfilesChanged = @"NP2ProfilesChanged";
 
@@ -220,6 +223,56 @@ void profile_switch(NSString *identifier)
 	[[NSUserDefaults standardUserDefaults] setObject:identifier forKey:kActiveKey];
 	load(identifier);
 	notify();
+}
+
+// ---- state slots
+
+static NSString *slot_path(NSInteger slot, NSString *ext)
+{
+	NSString *dir = [dir_of(profile_active()) stringByAppendingPathComponent:@"slots"];
+	[[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+	return [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%ld.%@", (long)slot + 1, ext]];
+}
+
+NSDate *profile_slotdate(NSInteger slot)
+{
+	return [[NSFileManager defaultManager] attributesOfItemAtPath:slot_path(slot, @"sav") error:nil].fileModificationDate;
+}
+
+NSString *profile_slotimagepath(NSInteger slot)
+{
+	NSString *path = slot_path(slot, @"png");
+	return [[NSFileManager defaultManager] fileExistsAtPath:path] ? path : nil;
+}
+
+BOOL profile_saveslot(NSInteger slot)
+{
+	NSString *path = slot_path(slot, @"sav");
+	int ret = lifecycle_savestateto(path.fileSystemRepresentation);
+	NSLog(@"profile: slot %ld saved (%d)", (long)slot + 1, ret);
+	if (ret != STATFLAG_SUCCESS) {
+		return NO;
+	}
+	[UIImagePNGRepresentation(capture_screenimage()) writeToFile:slot_path(slot, @"png") atomically:YES];
+	return YES;
+}
+
+int profile_checkslot(NSInteger slot)
+{
+	return lifecycle_checkstate(slot_path(slot, @"sav").fileSystemRepresentation);
+}
+
+BOOL profile_loadslot(NSInteger slot)
+{
+	int ret = lifecycle_loadstatefrom(slot_path(slot, @"sav").fileSystemRepresentation);
+	NSLog(@"profile: slot %ld loaded (%d)", (long)slot + 1, ret);
+	return ret != STATFLAG_FAILURE;
+}
+
+void profile_deleteslot(NSInteger slot)
+{
+	[[NSFileManager defaultManager] removeItemAtPath:slot_path(slot, @"sav") error:nil];
+	[[NSFileManager defaultManager] removeItemAtPath:slot_path(slot, @"png") error:nil];
 }
 
 // ---- export and import

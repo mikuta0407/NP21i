@@ -51,6 +51,7 @@
 #include <scrnmng.h>
 #include <embed/vramhdl.h>
 #include <embed/menubase/menubase.h>
+#include <statsave.h>
 
 enum {
 	SCREEN_WIDTH	= 640,
@@ -621,6 +622,93 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	return [UIMenu menuWithTitle:@"記録" image:[UIImage systemImageNamed:@"camera"] identifier:nil options:0 children:items];
 }
 
+// ---- state slots
+
+static UIImage *slot_thumbnail(NSInteger slot)
+{
+	NSString *path = profile_slotimagepath(slot);
+	UIImage *image = path ? [UIImage imageWithContentsOfFile:path] : nil;
+	if (image == nil) {
+		return [UIImage systemImageNamed:@"square.dashed"];
+	}
+	CGSize size = CGSizeMake(48, 30);
+	UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+	return [[[UIGraphicsImageRenderer alloc] initWithSize:size format:format] imageWithActions:^(UIGraphicsImageRendererContext *context) {
+		[image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+	}];
+}
+
+- (UIMenu *)slotsMenu
+{
+	__weak NP2KeyBar *weakSelf = self;
+	NSDateFormatter *format = [NSDateFormatter new];
+	format.dateFormat = @"M/d H:mm";
+	NSMutableArray<UIMenuElement *> *slots = [NSMutableArray array];
+	for (NSInteger slot = 0; slot < PROFILE_SLOTS; slot++) {
+		NSDate *date = profile_slotdate(slot);
+		NSMutableArray<UIMenuElement *> *actions = [NSMutableArray array];
+		[actions addObject:[UIAction actionWithTitle:@"ここに保存" image:[UIImage systemImageNamed:@"square.and.arrow.down"] identifier:nil handler:^(UIAction *a) {
+			(void)a;
+			[weakSelf saveSlot:slot];
+		}]];
+		if (date) {
+			[actions addObject:[UIAction actionWithTitle:@"ここに戻る" image:[UIImage systemImageNamed:@"arrow.uturn.backward"] identifier:nil handler:^(UIAction *a) {
+				(void)a;
+				[weakSelf confirmLoadSlot:slot];
+			}]];
+			UIAction *remove = [UIAction actionWithTitle:@"削除" image:[UIImage systemImageNamed:@"trash"] identifier:nil handler:^(UIAction *a) {
+				(void)a;
+				profile_deleteslot(slot);
+			}];
+			remove.attributes = UIMenuElementAttributesDestructive;
+			[actions addObject:remove];
+		}
+		UIMenu *menu = [UIMenu menuWithTitle:[NSString stringWithFormat:@"スロット %ld", (long)slot + 1] image:slot_thumbnail(slot)
+		                          identifier:nil options:0 children:actions];
+		menu.subtitle = date ? [format stringFromDate:date] : @"空き";
+		[slots addObject:menu];
+	}
+	UIMenu *menu = [UIMenu menuWithTitle:@"状態の保存と読み込み" image:[UIImage systemImageNamed:@"clock.arrow.circlepath"]
+	                          identifier:nil options:0 children:slots];
+	menu.subtitle = profile_name(profile_active());
+	return menu;
+}
+
+- (void)saveSlot:(NSInteger)slot
+{
+	if (!profile_saveslot(slot)) {
+		[self showMessage:@"保存できませんでした" detail:nil];
+	}
+}
+
+- (void)confirmLoadSlot:(NSInteger)slot
+{
+	int check = profile_checkslot(slot);
+	if (check == STATFLAG_FAILURE || (check & STATFLAG_VERSION)) {
+		[self showMessage:@"読み込めません" detail:@"このスロットの状態は、今のバージョンのアプリとは合いません。"];
+		return;
+	}
+	BOOL changed = (check & STATFLAG_DISKCHG) != 0;
+	NSString *message = changed
+		? @"保存したあとにディスクイメージが変わっています。戻ると、そのディスクの中身が壊れることがあります（ハードディスクの変更は失われます）。"
+		: @"今の状態は失われます。";
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"スロット %ld に戻りますか？", (long)slot + 1]
+	                                                               message:message preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"キャンセル" style:UIAlertActionStyleCancel handler:nil]];
+	[alert addAction:[UIAlertAction actionWithTitle:@"戻る" style:changed ? UIAlertActionStyleDestructive : UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+		(void)a;
+		profile_loadslot(slot);
+	}]];
+	[[self hostController] presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showMessage:(NSString *)title detail:(NSString *)detail
+{
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:detail preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+	[[self hostController] presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)hingeChanged:(NP2HingePosture)posture
 {
 	if (posture != _hinge) {
@@ -845,6 +933,9 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		menu.subtitle = profile_name(profile_active());
 		completion(@[ menu ]);
 	}];
+	UIDeferredMenuElement *slots = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+		completion(@[ [weakSelf slotsMenu] ]);
+	}];
 	UIDeferredMenuElement *capture = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
 		completion(@[ [weakSelf captureMenu] ]);
 	}];
@@ -873,7 +964,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		diskedit_present([weakSelf hostController]);
 	}];
 	return [UIMenu menuWithChildren:@[
-		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ profiles, fdd, hdd, files ]],
+		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ profiles, slots, fdd, hdd, files ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ capture, trackpad ]],
 		[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[ settings, np2menu, reset ]],
 	]];
@@ -1542,6 +1633,18 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 			midirec_stop(nil);
 		}
 		[self refreshRecording];
+	}
+	else if ([command hasPrefix:@"!slot:"]) {
+		/* "!slot:save:<n>" / "!slot:load:<n>" (1-based, no questions) */
+		NSArray<NSString *> *args = [[command substringFromIndex:6] componentsSeparatedByString:@":"];
+		NSInteger slot = (args.count > 1) ? args[1].integerValue - 1 : 0;
+		if ([args[0] isEqualToString:@"save"]) {
+			profile_saveslot(slot);
+		}
+		else {
+			NSLog(@"keybar: slot %ld check %d", (long)slot + 1, profile_checkslot(slot));
+			profile_loadslot(slot);
+		}
 	}
 	else if ([command hasPrefix:@"!profile:"]) {
 		/* "!profile:new:<name>:<copy|share|none>", "!profile:switch:<name>",

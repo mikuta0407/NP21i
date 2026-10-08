@@ -43,6 +43,17 @@ void profile_switch(NSString *identifier);
  * without its floppies or saved state; returns its identifier, or nil. */
 NSString *profile_create(NSString *name, NP2ProfileDisks disks, NSError **error);
 
+/* State slots of the environment in use, to come back to a moment
+ * (profiles/<id>/slots/<n>.sav, with a picture of the screen <n>.png). */
+#define PROFILE_SLOTS	6
+NSDate *profile_slotdate(NSInteger slot);			/* nil when empty */
+NSString *profile_slotimagepath(NSInteger slot);	/* nil when none */
+BOOL profile_saveslot(NSInteger slot);
+/* STATFLAG_* of the state (DISKCHG: a disk was written since). */
+int profile_checkslot(NSInteger slot);
+BOOL profile_loadslot(NSInteger slot);
+void profile_deleteslot(NSInteger slot);
+
 /* An environment as a folder <name>.np21env to keep or take to another
  * device: its settings, saved state and floppies, and copies of its disk
  * images (hdd/, fdd/). Made in a temporary directory. */

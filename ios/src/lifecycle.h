@@ -18,6 +18,13 @@ void lifecycle_start(void);
 void lifecycle_savestate(void);
 int lifecycle_restorestate(void);
 
+/* The same with another file (state slots): STATFLAG_* results. Check a
+ * state before loading it: STATFLAG_DISKCHG means a disk was written since,
+ * and loading it may corrupt that disk. */
+int lifecycle_savestateto(const char *path);
+int lifecycle_checkstate(const char *path);
+int lifecycle_loadstatefrom(const char *path);
+
 /* Ratio of emulated time to real time over the last second (1.0 = full
  * speed), or a negative value while unknown. Call regularly. */
 double lifecycle_emulationspeed(void);
