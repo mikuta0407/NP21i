@@ -94,6 +94,9 @@ typedef NS_ENUM(NSInteger, NP2KeyStyle) {
 /* The PC-9801 keyboard: the main keys, and the editing keys with the
  * numeric keypad. */
 + (NP2KeyboardLayout *)pc98Layout;
+/* For games: arrows, Z / X / SPACE / RETURN, SHIFT / CTRL, ESC, f·1-5,
+ * 1-5, Y / N. */
++ (NP2KeyboardLayout *)gameLayout;
 @end
 
 NS_ASSUME_NONNULL_END

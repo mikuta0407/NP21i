@@ -43,36 +43,45 @@ static const UINT8 s_joybits[6] = {
 	JOY_BTN1_BIT | JOY_RAPIDBTN1_BIT, JOY_BTN2_BIT | JOY_RAPIDBTN2_BIT
 };
 
+#define KEY_NONE	0xfe		/* a button that does nothing */
+#define KEY_JOY		0xff		/* a joystick bit */
+
+/* What A, B, X, Y, L, R, menu and options are as keys (settings). */
+static const UINT8 s_defaultmap[GP_COUNT - 4] = {
+	0x29, 0x2a,							/* A = Z, B = X */
+	PC98KEY_SPACE, PC98KEY_RETURN,		/* X, Y */
+	PC98KEY_SHIFT, PC98KEY_CTRL,		/* L, R */
+	PC98KEY_ESC, PC98KEY_F1				/* menu, options */
+};
+static UINT8 s_map[GP_COUNT - 4];
+
 static NP2GamepadMode s_mode;
 static UINT s_held;			/* from the controllers */
 static UINT s_debugHeld;	/* from debug commands */
 static UINT s_applied;		/* pressed as keys or joystick bits */
 static UINT8 s_joy = 0xff;
 
-/* The key for a button in a mode, or 0xff when it is a joystick bit. */
-static UINT8 key_for(int index, NP2GamepadMode mode)
+/* The key for a button in a mode and map, KEY_JOY or KEY_NONE. */
+static UINT8 key_for(int index, NP2GamepadMode mode, const UINT8 *map)
 {
 	static const UINT8 arrows[4] = { PC98KEY_UP, PC98KEY_DOWN, PC98KEY_LEFT, PC98KEY_RIGHT };
 	static const UINT8 keypad[4] = { 0x43, 0x4b, 0x46, 0x48 };		/* <8> <2> <4> <6> */
-	static const UINT8 others[GP_COUNT - 4] = {
-		0x29, 0x2a,							/* A = Z, B = X */
-		PC98KEY_SPACE, PC98KEY_RETURN,		/* X, Y */
-		PC98KEY_SHIFT, PC98KEY_CTRL,		/* L, R */
-		PC98KEY_ESC, PC98KEY_F1				/* menu, options */
-	};
 	if (mode == NP2GamepadModeJoystick && index < 6) {
-		return 0xff;
+		return KEY_JOY;
 	}
 	if (index < 4) {
 		return (mode == NP2GamepadModeKeypad) ? keypad[index] : arrows[index];
 	}
-	return others[index - 4];
+	return map[index - 4];
 }
 
-static void set_button(int index, BOOL down, NP2GamepadMode mode)
+static void set_button(int index, BOOL down, NP2GamepadMode mode, const UINT8 *map)
 {
-	UINT8 key = key_for(index, mode);
-	if (key == 0xff) {
+	UINT8 key = key_for(index, mode, map);
+	if (key == KEY_NONE) {
+		return;
+	}
+	if (key == KEY_JOY) {
 		if (down) {
 			s_joy &= (UINT8)~s_joybits[index];
 		}
@@ -94,25 +103,39 @@ static void apply(void)
 	UINT changed = held ^ s_applied;
 	for (int i = 0; i < GP_COUNT; i++) {
 		if (changed & (1u << i)) {
-			set_button(i, (held >> i) & 1, s_mode);
+			set_button(i, (held >> i) & 1, s_mode, s_map);
 		}
 	}
 	s_applied = held;
 }
 
-static void set_mode(NP2GamepadMode mode)
+static void load_map(UINT8 *map)
 {
-	if (mode == s_mode) {
+	NSDictionary *saved = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kSettingGamepadMap];
+	for (int i = 4; i < GP_COUNT; i++) {
+		NSNumber *code = saved[@(s_names[i])];
+		map[i - 4] = code ? (UINT8)code.unsignedIntValue : s_defaultmap[i - 4];
+	}
+}
+
+/* The mode and map from the settings: what is held is let go as it was
+ * and pressed again as it is now. */
+static void reconfigure(void)
+{
+	NP2GamepadMode mode = (NP2GamepadMode)settings_gamepadmode();
+	UINT8 map[GP_COUNT - 4];
+	load_map(map);
+	if (mode == s_mode && memcmp(map, s_map, sizeof(map)) == 0) {
 		return;
 	}
-	/* let go in the old mode, press again in the new one */
 	for (int i = 0; i < GP_COUNT; i++) {
 		if (s_applied & (1u << i)) {
-			set_button(i, NO, s_mode);
+			set_button(i, NO, s_mode, s_map);
 		}
 	}
 	s_applied = 0;
 	s_mode = mode;
+	memcpy(s_map, map, sizeof(map));
 	apply();
 }
 
@@ -184,6 +207,7 @@ static void follow(GCController *controller)
 void gamepad_initialize(void)
 {
 	s_mode = (NP2GamepadMode)settings_gamepadmode();
+	load_map(s_map);
 	NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
 	[nc addObserverForName:GCControllerDidConnectNotification object:nil queue:NSOperationQueue.mainQueue
 	            usingBlock:^(NSNotification *note) {
@@ -196,7 +220,7 @@ void gamepad_initialize(void)
 	}];
 	[nc addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:NSOperationQueue.mainQueue
 	            usingBlock:^(NSNotification *note) {
-		set_mode((NP2GamepadMode)settings_gamepadmode());
+		reconfigure();
 	}];
 	for (GCController *controller in GCController.controllers) {
 		follow(controller);
@@ -208,7 +232,17 @@ BOOL gamepad_debugcommand(NSString *command)
 {
 	if ([command hasPrefix:@"!gpmode:"]) {
 		[[NSUserDefaults standardUserDefaults] setInteger:[command substringFromIndex:8].integerValue forKey:kSettingGamepad];
-		set_mode((NP2GamepadMode)settings_gamepadmode());
+		reconfigure();
+		return YES;
+	}
+	if ([command hasPrefix:@"!gpkey:"]) {
+		/* "!gpkey:<button>/<key title>" */
+		NSArray<NSString *> *args = [[command substringFromIndex:7] componentsSeparatedByString:@"/"];
+		NSUInteger index = (args.count > 1) ? [gamepad_keytitles() indexOfObject:args[1]] : NSNotFound;
+		if (index != NSNotFound) {
+			gamepad_setkeyindex(args[0], (NSInteger)index);
+			reconfigure();
+		}
 		return YES;
 	}
 	if (![command hasPrefix:@"!gp:"]) {
@@ -230,6 +264,108 @@ BOOL gamepad_debugcommand(NSString *command)
 	}
 	NSLog(@"gamepad: no button %@", args[0]);
 	return YES;
+}
+
+// ---- settings
+
+NSArray<NSString *> *gamepad_buttons(void)
+{
+	NSMutableArray<NSString *> *buttons = [NSMutableArray array];
+	for (int i = 4; i < GP_COUNT; i++) {
+		[buttons addObject:@(s_names[i])];
+	}
+	return buttons;
+}
+
+NSString *gamepad_buttontitle(NSString *button)
+{
+	NSDictionary<NSString *, NSString *> *titles = @{
+		@"a": @"A", @"b": @"B", @"x": @"X", @"y": @"Y", @"l": @"L（L1・L2）", @"r": @"R（R1・R2）",
+		@"menu": @"メニュー", @"options": @"オプション",
+	};
+	return titles[button] ?: button;
+}
+
+/* The keys a button can be. */
+static NSArray<NSArray *> *key_choices(void)
+{
+	static NSArray<NSArray *> *choices;
+	static dispatch_once_t once;
+	dispatch_once(&once, ^{
+		NSMutableArray<NSArray *> *list = [NSMutableArray arrayWithArray:@[
+			@[ @"なし", @(KEY_NONE) ],
+			@[ @"Z", @0x29 ], @[ @"X", @0x2a ], @[ @"C", @0x2b ], @[ @"V", @0x2c ],
+			@[ @"A", @0x1d ], @[ @"S", @0x1e ], @[ @"D", @0x1f ], @[ @"Q", @0x10 ], @[ @"W", @0x11 ], @[ @"E", @0x12 ],
+			@[ @"Y", @0x15 ], @[ @"N", @0x2e ],
+			@[ @"スペース", @(PC98KEY_SPACE) ], @[ @"リターン", @(PC98KEY_RETURN) ], @[ @"ESC", @(PC98KEY_ESC) ],
+			@[ @"TAB", @(PC98KEY_TAB) ], @[ @"BS", @(PC98KEY_BS) ], @[ @"STOP", @(PC98KEY_STOP) ],
+			@[ @"SHIFT", @(PC98KEY_SHIFT) ], @[ @"CTRL", @(PC98KEY_CTRL) ], @[ @"GRPH", @(PC98KEY_GRPH) ],
+			@[ @"XFER", @(PC98KEY_XFER) ], @[ @"NFER", @(PC98KEY_NFER) ],
+			@[ @"↑", @(PC98KEY_UP) ], @[ @"↓", @(PC98KEY_DOWN) ], @[ @"←", @(PC98KEY_LEFT) ], @[ @"→", @(PC98KEY_RIGHT) ],
+		]];
+		for (int i = 0; i < 10; i++) {
+			[list addObject:@[ [NSString stringWithFormat:@"f·%d", i + 1], @(PC98KEY_F1 + i) ]];
+		}
+		for (int i = 1; i <= 9; i++) {
+			[list addObject:@[ [NSString stringWithFormat:@"%d", i], @(i) ]];
+		}
+		[list addObject:@[ @"0", @0x0a ]];
+		choices = list;
+	});
+	return choices;
+}
+
+NSArray<NSString *> *gamepad_keytitles(void)
+{
+	NSMutableArray<NSString *> *titles = [NSMutableArray array];
+	for (NSArray *choice in key_choices()) {
+		[titles addObject:choice[0]];
+	}
+	return titles;
+}
+
+static NSInteger button_index(NSString *button)
+{
+	for (int i = 4; i < GP_COUNT; i++) {
+		if ([button isEqualToString:@(s_names[i])]) {
+			return i - 4;
+		}
+	}
+	return -1;
+}
+
+NSInteger gamepad_keyindex(NSString *button)
+{
+	NSInteger index = button_index(button);
+	if (index < 0) {
+		return -1;
+	}
+	UINT8 map[GP_COUNT - 4];
+	load_map(map);
+	NSArray<NSArray *> *choices = key_choices();
+	for (NSUInteger i = 0; i < choices.count; i++) {
+		if ([choices[i][1] unsignedIntValue] == map[index]) {
+			return (NSInteger)i;
+		}
+	}
+	return -1;
+}
+
+void gamepad_setkeyindex(NSString *button, NSInteger choice)
+{
+	NSArray<NSArray *> *choices = key_choices();
+	if (button_index(button) < 0 || choice < 0 || choice >= (NSInteger)choices.count) {
+		return;
+	}
+	NSMutableDictionary *saved = [[[NSUserDefaults standardUserDefaults] dictionaryForKey:kSettingGamepadMap] mutableCopy]
+		?: [NSMutableDictionary dictionary];
+	saved[button] = choices[(NSUInteger)choice][1];
+	[[NSUserDefaults standardUserDefaults] setObject:saved forKey:kSettingGamepadMap];
+}
+
+void gamepad_resetkeys(void)
+{
+	[[NSUserDefaults standardUserDefaults] removeObjectForKey:kSettingGamepadMap];
 }
 
 // ---- NP2kai's joystick (patch 0011)

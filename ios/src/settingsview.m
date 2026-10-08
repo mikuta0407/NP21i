@@ -16,6 +16,7 @@
 #include "diskedit.h"
 #include "lifecycle.h"
 #include "profile.h"
+#include "gamepad.h"
 
 #import <CoreAudioKit/CoreAudioKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -452,6 +453,35 @@ static UIViewController *new_disk_screen(void)
 	}];
 }
 
+// ---- game controller buttons
+
+static UIViewController *gamepad_screen(void)
+{
+	return [[NP2TableViewController alloc] initWithTitle:@"ボタンの割り当て" build:^NSArray<NP2Section *> *{
+		NSMutableArray<NP2Row *> *rows = [NSMutableArray array];
+		for (NSString *button in gamepad_buttons()) {
+			[rows addObject:detail_row(gamepad_buttontitle(button), ^NSString *{
+				NSInteger index = gamepad_keyindex(button);
+				NSArray<NSString *> *titles = gamepad_keytitles();
+				return (index >= 0) ? titles[(NSUInteger)index] : @"";
+			}, ^(UIViewController *c) {
+				[c.navigationController pushViewController:choice_screen(gamepad_buttontitle(button), nil, gamepad_keytitles(), ^NSInteger {
+					return gamepad_keyindex(button);
+				}, ^(NSInteger index) {
+					gamepad_setkeyindex(button, index);
+				}) animated:YES];
+			})];
+		}
+		return @[
+			section(nil, @"ボタンを押したときに PC-98 で押されるキーです。「十字キーと A / B」がジョイスティック端子のときは、A と B はトリガー 1 / 2 になります。割り当ては環境ごとに覚えます。", rows),
+			section(nil, nil, @[ button_row(@"標準に戻す", ^(UIViewController *c) {
+				gamepad_resetkeys();
+				[(NP2TableViewController *)c reload];
+			}) ]),
+		];
+	}];
+}
+
 // ---- environments
 
 void settingsview_switchprofile(UIViewController *host, NSString *identifier)
@@ -718,7 +748,7 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもので、iOS のキーボードは文字どおりに入力します。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。振動と文字の大きな表示は、PC-98 キーボードを押したときのものです。長押しで連続入力は、押し続けたキーを 0.5 秒後から繰り返します（NP2 メニューの Key-repeat と同じ設定です）。", @[
+	[sections addObject:section(@"キーボード", @"キーバーのキーボードボタンで出す画面のキーボードを選びます（ボタンの長押しでも切り替えられます）。PC-98 キーボードは PC-98 のキー配置そのもの、ゲーム用キーボードは十字キーと Z / X / スペース / リターンなどを大きくしたもので、iOS のキーボードは文字どおりに入力します。どれを使うかは環境ごとに覚えます。ハードウェアキーボードの配列は、JIS ではキーの位置どおり、US では記号をキートップの文字どおりに入力します。振動と文字の大きな表示は、PC-98 キーボードを押したときのものです。長押しで連続入力は、押し続けたキーを 0.5 秒後から繰り返します（NP2 メニューの Key-repeat と同じ設定です）。", @[
 		detail_row(@"画面のキーボード", ^NSString *{
 			return settings_screenkeyboardtitle(settings_screenkeyboard());
 		}, ^(UIViewController *c) {
@@ -755,7 +785,10 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"ゲームコントローラ", @"十字キー（左スティック）と A / B ボタンの割り当てです。矢印キー・テンキーでは A が Z、B が X になります。ジョイスティック端子は、サウンドボード（PC-9801-26K / 86 など）のジョイスティック端子につないだものとして、トリガー 1 / 2 になります。ほかのボタンはいつも X がスペース、Y がリターン、L が SHIFT、R が CTRL、メニューが ESC、オプションが f·1 です。", @[
+	[sections addObject:section(@"ゲームコントローラ", @"十字キー（左スティック）は矢印キー、テンキー、ジョイスティック端子から選べます。ジョイスティック端子は、サウンドボード（PC-9801-26K / 86 など）のジョイスティック端子につないだものとして、A / B がトリガー 1 / 2 になります。ほかのボタンは「ボタンの割り当て」で好きなキーにできます（標準は A が Z、B が X、X がスペース、Y がリターン、L が SHIFT、R が CTRL、メニューが ESC、オプションが f·1）。どちらも環境ごとに覚えます。", @[
+		detail_row(@"ボタンの割り当て", nil, ^(UIViewController *c) {
+			[c.navigationController pushViewController:gamepad_screen() animated:YES];
+		}),
 		detail_row(@"十字キーと A / B", ^NSString *{
 			NSArray<NSString *> *labels = settings_gamepadmodes();
 			NSInteger index = settings_gamepadmode();

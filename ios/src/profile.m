@@ -157,6 +157,26 @@ NSArray<NSString *> *profile_disks(NSString *identifier)
 	return disks;
 }
 
+/* App settings that belong to an environment: a game wants other keys
+ * than Recomposer. Kept in profile.plist "settings". */
+static NSDictionary *current_settings(void)
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+	NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+	for (NSString *key in @[ kSettingScreenKeyboard, kSettingGamepad, kSettingGamepadMap ]) {
+		settings[key] = [defaults objectForKey:key] ?: @{};	/* {}: the map's default */
+	}
+	return settings;
+}
+
+static void apply_settings(NSDictionary *settings)
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+	for (NSString *key in settings) {
+		[defaults setObject:settings[key] forKey:key];
+	}
+}
+
 // ---- switching
 
 static void save_config(void)
@@ -178,6 +198,7 @@ static void save_active(void)
 	}
 	NSMutableDictionary *info = info_of(active);
 	info[@"fdd"] = fdd;
+	info[@"settings"] = current_settings();
 	[[NSFileManager defaultManager] createDirectoryAtPath:dir_of(active) withIntermediateDirectories:YES attributes:nil error:nil];
 	write_info(active, info);
 	replace_file([data_dir() stringByAppendingPathComponent:kConfig], [dir_of(active) stringByAppendingPathComponent:kConfig]);
@@ -221,6 +242,7 @@ void profile_switch(NSString *identifier)
 	NSLog(@"profile: %@ -> %@", profile_name(profile_active()), profile_name(identifier));
 	save_active();
 	[[NSUserDefaults standardUserDefaults] setObject:identifier forKey:kActiveKey];
+	apply_settings(info_of(identifier)[@"settings"]);
 	load(identifier);
 	notify();
 }
@@ -534,7 +556,7 @@ NSString *profile_create(NSString *name, NP2ProfileDisks disks, NSError **error)
 		               encoding:NSUTF8StringEncoding error:error]) {
 		return nil;
 	}
-	write_info(identifier, @{ @"name": name, @"created": [NSDate date], @"fdd": @[] });
+	write_info(identifier, @{ @"name": name, @"created": [NSDate date], @"fdd": @[], @"settings": current_settings() });
 	notify();
 	return identifier;
 }

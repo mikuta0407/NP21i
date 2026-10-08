@@ -7,7 +7,7 @@
  * keyboard_layout        -> keyinput_setlayout() (0 = JIS, 1 = US; default JIS)
  * run_in_background, resume_state -> lifecycle.m; show_speed_warning, screen_keyboard,
  * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape, mouse_lock -> keybar.m;
- * gamepad_mode -> gamepad.m
+ * gamepad_mode, gamepad_map -> gamepad.m
  *
  * The environment variables NP2_MIDI_LATENCY_MS / NP2_MIDIIN_LATENCY_MS
  * override the settings (for testing with simctl: SIMCTL_CHILD_NP2_...=0).
@@ -37,6 +37,7 @@ NSString *const kSettingKeyHaptics = @"key_haptics";
 NSString *const kSettingKeyPreview = @"key_preview";
 NSString *const kSettingLandscapeFold = @"fold_landscape";
 NSString *const kSettingGamepad = @"gamepad_mode";
+NSString *const kSettingGamepadMap = @"gamepad_map";
 NSString *const kSettingMouseLock = @"mouse_lock";
 NSString *const kSettingTrackpad = @"trackpad_mouse";
 NSString *const kSettingTrackpadSpeed = @"trackpad_speed";

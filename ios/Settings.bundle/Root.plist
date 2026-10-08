@@ -104,11 +104,13 @@
 			<key>Titles</key>
 			<array>
 				<string>PC-98 キーボード</string>
+				<string>ゲーム用キーボード</string>
 				<string>iOS のキーボード</string>
 			</array>
 			<key>Values</key>
 			<array>
 				<string>pc98</string>
+				<string>game</string>
 				<string>system</string>
 			</array>
 		</dict>
@@ -138,7 +140,7 @@
 			<key>Title</key>
 			<string>ゲームコントローラ</string>
 			<key>FooterText</key>
-			<string>十字キーと A / B の割り当てです（矢印キー・テンキーでは A が Z、B が X）。ほかのボタンは X がスペース、Y がリターン、L が SHIFT、R が CTRL、メニューが ESC、オプションが f·1 です。</string>
+			<string>十字キーと A / B の割り当てです。ほかのボタンのキーはアプリ内の ≡ →「設定…」→「ボタンの割り当て」で変えられます。</string>
 		</dict>
 		<dict>
 			<key>Type</key>

@@ -291,6 +291,41 @@ static NP2KeyBlock *pc98_edit(void)
 	]];
 }
 
+/* For games: a large cross and the keys games mostly ask for, one block. */
+static NP2KeyBlock *game_block(void)
+{
+	NP2Key *(^action)(NSString *, NSString *, UINT8, NSString *) = ^NP2Key *(NSString *identifier, NSString *label, UINT8 code, NSString *spoken) {
+		return [[[[NP2Key key:identifier label:label code:code] style:NP2KeyStyleAccent] width:2.75] spoken:spoken];
+	};
+	NP2Key *(^digit)(int) = ^NP2Key *(int n) {
+		return [NP2Key key:[NSString stringWithFormat:@"%02x", n] label:[NSString stringWithFormat:@"%d", n] code:(UINT8)n];
+	};
+	return [NP2KeyBlock block:@"ゲーム" rows:@[
+		[NP2KeyRow row:concat(@[
+			@[ [dark(@"esc", @"ESC", PC98KEY_ESC) width:1.5], [dark(@"stop", @"STOP", PC98KEY_STOP) width:1.5], [NP2Key spacer:0.5] ],
+			function_keys(0, 5, 1.3),
+		]) height:0.75],
+		[NP2KeyRow row:@[
+			[NP2Key spacer:1], [arrow(@"up", @"↑", PC98KEY_UP, @"上") width:2], [NP2Key spacer:1], [NP2Key spacer:0.5],
+			[[NP2Key modifier:@"shift" label:@"SHIFT" code:PC98KEY_SHIFT] width:2.75],
+			[[NP2Key modifier:@"ctrl" label:@"CTRL" code:PC98KEY_CTRL] width:2.75],
+		]],
+		[NP2KeyRow row:@[
+			[arrow(@"left", @"←", PC98KEY_LEFT, @"左") width:2], [arrow(@"right", @"→", PC98KEY_RIGHT, @"右") width:2], [NP2Key spacer:0.5],
+			action(@"29", @"Z", 0x29, @"ゼット"), action(@"2a", @"X", 0x2a, @"エックス"),
+		]],
+		[NP2KeyRow row:@[
+			[NP2Key spacer:1], [arrow(@"down", @"↓", PC98KEY_DOWN, @"下") width:2], [NP2Key spacer:1], [NP2Key spacer:0.5],
+			action(@"space", @"SPACE", PC98KEY_SPACE, @"スペース"), action(@"ret", @"RETURN", PC98KEY_RETURN, @"リターン"),
+		]],
+		[NP2KeyRow row:@[
+			digit(1), digit(2), digit(3), digit(4), digit(5), [NP2Key spacer:0.5],
+			[[NP2Key key:@"15" label:@"Y" code:0x15] width:1.5], [[NP2Key key:@"2e" label:@"N" code:0x2e] width:1.5],
+			[[dark(@"bs", @"BS", PC98KEY_BS) width:1.5] spoken:@"バックスペース"],
+		]],
+	]];
+}
+
 @implementation NP2KeyboardLayout
 
 + (NP2KeyboardLayout *)layout:(NSString *)identifier title:(NSString *)title blocks:(NSArray<NP2KeyBlock *> *)blocks
@@ -307,7 +342,7 @@ static NP2KeyBlock *pc98_edit(void)
 	static NSArray<NP2KeyboardLayout *> *layouts;
 	static dispatch_once_t once;
 	dispatch_once(&once, ^{
-		layouts = @[ [self pc98Layout] ];
+		layouts = @[ [self pc98Layout], [self gameLayout] ];
 	});
 	return layouts;
 }
@@ -325,6 +360,11 @@ static NP2KeyBlock *pc98_edit(void)
 + (NP2KeyboardLayout *)pc98Layout
 {
 	return [self layout:@"pc98" title:@"PC-98 キーボード" blocks:@[ pc98_main(), pc98_edit() ]];
+}
+
++ (NP2KeyboardLayout *)gameLayout
+{
+	return [self layout:@"game" title:@"ゲーム用キーボード" blocks:@[ game_block() ]];
 }
 
 @end

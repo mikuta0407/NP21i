@@ -23,6 +23,7 @@ extern NSString *const kSettingKeyHaptics;			/* BOOL: the app's keyboard taps ba
 extern NSString *const kSettingKeyPreview;			/* BOOL: the app's keyboard shows pressed characters larger */
 extern NSString *const kSettingLandscapeFold;		/* half open and wider than tall: 0 keyboard below, 1 screen left, 2 screen right */
 extern NSString *const kSettingGamepad;			/* NP2GamepadMode (gamepad.h) */
+extern NSString *const kSettingGamepadMap;			/* button name -> PC-98 key code (gamepad.m) */
 extern NSString *const kSettingMouseLock;			/* BOOL: a connected mouse's pointer stays in the app */
 extern NSString *const kSettingTrackpad;			/* BOOL: touches on the screen are a trackpad's */
 extern NSString *const kSettingTrackpadSpeed;		/* % of a finger's travel, 100 = alike */
