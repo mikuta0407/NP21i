@@ -161,3 +161,19 @@ static inline void np21_pushmouse(int what, float x, float y)
 #endif
 	SDL_PushEvent(&e);
 }
+
+/* Relative mouse mode: with a mouse connected to an iPad, iOS locks the
+ * pointer in the app and SDL reports how far the mouse moves. */
+static inline void np21_setrelativemouse(int on)
+{
+#if USE_SDL >= 3
+	int count = 0;
+	SDL_Window **windows = SDL_GetWindows(&count);
+	if (windows && count > 0) {
+		SDL_SetWindowRelativeMouseMode(windows[0], on ? true : false);
+	}
+	SDL_free(windows);
+#else
+	SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
+#endif
+}

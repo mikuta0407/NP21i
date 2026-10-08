@@ -6,7 +6,7 @@
  * midi_input_latency_ms  -> cmmidi_midiin_latency_ms (default 20, 0 = deliver immediately)
  * keyboard_layout        -> keyinput_setlayout() (0 = JIS, 1 = US; default JIS)
  * run_in_background, resume_state -> lifecycle.m; show_speed_warning, screen_keyboard,
- * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape -> keybar.m;
+ * trackpad_mouse, trackpad_speed, key_haptics, key_preview, fold_landscape, mouse_lock -> keybar.m;
  * gamepad_mode -> gamepad.m
  *
  * The environment variables NP2_MIDI_LATENCY_MS / NP2_MIDIIN_LATENCY_MS
@@ -37,6 +37,7 @@ NSString *const kSettingKeyHaptics = @"key_haptics";
 NSString *const kSettingKeyPreview = @"key_preview";
 NSString *const kSettingLandscapeFold = @"fold_landscape";
 NSString *const kSettingGamepad = @"gamepad_mode";
+NSString *const kSettingMouseLock = @"mouse_lock";
 NSString *const kSettingTrackpad = @"trackpad_mouse";
 NSString *const kSettingTrackpadSpeed = @"trackpad_speed";
 
@@ -117,6 +118,11 @@ NSArray<NSString *> *settings_gamepadmodes(void)
 	return @[ @"矢印キー", @"テンキー（8・2・4・6）", @"ジョイスティック端子" ];
 }
 
+BOOL settings_mouselock(void)
+{
+	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingMouseLock];
+}
+
 BOOL settings_trackpad(void)
 {
 	return [[NSUserDefaults standardUserDefaults] boolForKey:kSettingTrackpad];
@@ -169,7 +175,7 @@ void settings_initialize(void)
 	[[NSUserDefaults standardUserDefaults] registerDefaults:@{ kSettingMidiOutputLatency: @20, kSettingMidiInputLatency: @20, kSettingKeyboardLayout: @(KEYLAYOUT_JIS),
 		kSettingRunInBackground: @YES, kSettingResume: @YES, kSettingShowSpeed: @YES,
 		kSettingScreenKeyboard: @"pc98", kSettingTrackpadSpeed: @100,
-		kSettingKeyHaptics: @YES, kSettingKeyPreview: @YES }];
+		kSettingKeyHaptics: @YES, kSettingKeyPreview: @YES, kSettingMouseLock: @YES }];
 	apply_settings();
 	/* Changes made in the Settings app arrive while the app is in the
 	 * background, so re-read them when it becomes active again. */

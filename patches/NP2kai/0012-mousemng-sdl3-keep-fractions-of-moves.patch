@@ -1,0 +1,24 @@
+diff --git a/sdl/mousemng.c b/sdl/mousemng.c
+--- a/sdl/mousemng.c
++++ b/sdl/mousemng.c
+@@ -229,6 +229,20 @@
+ 		mousemng.x += motion->xrel;
+ 		mousemng.y += motion->yrel;
+ 	}
++#elif USE_SDL >= 3
++	/* SDL3's moves are fractions of a pixel (a pointer locked by
++	 * relative mode, scaled to the screen): keep what is not a pixel yet */
++	static float remainx, remainy;
++	int dx, dy;
++
++	remainx += motion->xrel;
++	remainy += motion->yrel;
++	dx = (int)remainx;
++	dy = (int)remainy;
++	remainx -= dx;
++	remainy -= dy;
++	mousemng.x += dx;
++	mousemng.y += dy;
+ #else
+ 	mousemng.x += motion->xrel;
+ 	mousemng.y += motion->yrel;

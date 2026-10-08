@@ -23,6 +23,7 @@ extern NSString *const kSettingKeyHaptics;			/* BOOL: the app's keyboard taps ba
 extern NSString *const kSettingKeyPreview;			/* BOOL: the app's keyboard shows pressed characters larger */
 extern NSString *const kSettingLandscapeFold;		/* half open and wider than tall: 0 keyboard below, 1 screen left, 2 screen right */
 extern NSString *const kSettingGamepad;			/* NP2GamepadMode (gamepad.h) */
+extern NSString *const kSettingMouseLock;			/* BOOL: a connected mouse's pointer stays in the app */
 extern NSString *const kSettingTrackpad;			/* BOOL: touches on the screen are a trackpad's */
 extern NSString *const kSettingTrackpadSpeed;		/* % of a finger's travel, 100 = alike */
 
@@ -53,6 +54,7 @@ NSInteger settings_landscapefold(void);
 NSArray<NSString *> *settings_landscapefolds(void);
 NSInteger settings_gamepadmode(void);
 NSArray<NSString *> *settings_gamepadmodes(void);
+BOOL settings_mouselock(void);
 BOOL settings_trackpad(void);
 /* The trackpad speed as a factor (1 = the pointer travels as the finger). */
 double settings_trackpadspeed(void);

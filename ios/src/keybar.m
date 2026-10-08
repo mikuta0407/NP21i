@@ -36,6 +36,7 @@
 
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <GameController/GameController.h>
 #include "sdlcompat.h"
 #include <pccore.h>
 #include <nevent.h>
@@ -45,6 +46,8 @@
 #include <kbtrans.h>
 #include <sysmenu.h>
 #include <scrnmng.h>
+#include <embed/vramhdl.h>
+#include <embed/menubase/menubase.h>
 
 enum {
 	SCREEN_WIDTH	= 640,
@@ -250,6 +253,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	UIButton *_dpadButton;
 	NP2DPad *_dpad;
 	NP2TrackpadView *_trackpad;	/* under everything, over SDL's view */
+	BOOL _pointerLocked;		/* a connected mouse moves the PC-98 mouse by travel */
 	UIButton *_hideButton;
 	UIButton *_showButton;
 	UILabel *_speedLabel;
@@ -357,6 +361,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 		[bar refreshModifiers];
 		[bar refreshSpeed];
 		[bar checkScreenSize];
+		[bar updatePointerLock];
 	}];
 	hinge_observe(self, ^(NP2HingePosture posture) {
 		[weakSelf hingeChanged:posture];
@@ -485,6 +490,25 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 	[defaults setBool:![defaults boolForKey:[self dpadKey]] forKey:[self dpadKey]];
 	[self setNeedsLayout];
+}
+
+/* A mouse connected to an iPad drives the PC-98 mouse by how far it moves,
+ * its pointer locked in the app (SDL's relative mode), unless turned off in
+ * the settings. Not while the NP2 menu, which is pointed at, or another
+ * screen (settings, disks) is up, or the app is not in front. */
+- (void)updatePointerLock
+{
+	BOOL lock = NO;
+	if (@available(iOS 14.0, *)) {
+		lock = settings_mouselock() && GCMouse.mice.count > 0 && menuvram == NULL
+			&& self.window.rootViewController.presentedViewController == nil
+			&& UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+	}
+	if (lock != _pointerLocked) {
+		_pointerLocked = lock;
+		np21_setrelativemouse(lock);
+		NSLog(@"keybar: pointer %s", lock ? "locked" : "unlocked");
+	}
 }
 
 - (void)hingeChanged:(NP2HingePosture)posture

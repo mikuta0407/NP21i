@@ -547,9 +547,12 @@ static NSArray<NP2Section *> *settings_sections(void)
 		}),
 	])];
 
-	[sections addObject:section(@"マウス", @"オンにすると、画面をタッチパッドのように使います。指でなぞるとマウスが動き、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグです。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。≡ メニューからも切り替えられます。", @[
+	[sections addObject:section(@"マウス", @"オンにすると、画面をタッチパッドのように使います。指でなぞるとマウスが動き、タップで左クリック、2 本指のタップで右クリック、少し押さえてから動かすとドラッグです。オフのときは、触れた所へマウスが動き、触れている間は左ボタンを押したままになります。≡ メニューからも切り替えられます。iPad にマウスやトラックパッドをつないだときは、ポインタをアプリの中に固定して、動かした分だけ PC-98 のマウスを動かします（NP2 メニューや設定を開いている間は固定しません）。", @[
 		toggle_row(@"画面をタッチパッドにする", ^BOOL { return settings_trackpad(); }, ^(BOOL on) {
 			[defaults setBool:on forKey:kSettingTrackpad];
+		}),
+		toggle_row(@"つないだマウスのポインタを固定", ^BOOL { return settings_mouselock(); }, ^(BOOL on) {
+			[defaults setBool:on forKey:kSettingMouseLock];
 		}),
 		detail_row(@"タッチパッドの速さ", ^NSString *{
 			return [NSString stringWithFormat:@"%ld%%", (long)lround(settings_trackpadspeed() * 100)];
