@@ -2,9 +2,10 @@ cmake_minimum_required(VERSION 3.24)
 
 # iOS / iPadOS port of Neko Project II kai (np21/w based).
 # Configure with:
-#   cmake -S . -B build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS
-# NP21_SDL selects SDL2 (vendor/SDL, default) or SDL3 (vendor/SDL3):
-#   cmake -S . -B build/ios3 -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DNP21_SDL=3
+#   cmake -S . -B build/ios3 -G Xcode -DCMAKE_SYSTEM_NAME=iOS
+# NP21_SDL selects SDL3 (vendor/SDL3, default) or SDL2 (vendor/SDL):
+#   cmake -S . -B build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DNP21_SDL=2
+# An IPA for the device: scripts/make-ipa.sh
 project(NP21iOS LANGUAGES C CXX OBJC)
 
 set(CMAKE_C_STANDARD 11)
@@ -12,7 +13,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "")
 
 set(NP2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/NP2kai")
-set(NP21_SDL "2" CACHE STRING "SDL major version: 2 or 3")
+set(NP21_SDL "3" CACHE STRING "SDL major version: 2 or 3")
 if(NP21_SDL EQUAL 3)
 	set(SDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/SDL3")
 else()
