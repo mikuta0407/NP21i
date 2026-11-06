@@ -676,7 +676,7 @@ static UIViewController *help_screen(void)
 			]),
 			topic(@"ファイル", @[
 				[NSString stringWithFormat:@"%@ に、ハードディスク（hdd）、フロッピー（fdd）、Z: ドライブ（hostdrv）、記録（captures、midi）、環境（profiles）があります。", data_dir_hint(nil)],
-				@"BIOS.ROM と FONT.ROM は実機から吸い出したものを、このフォルダに入れてください。",
+				@"BIOS.ROM と FONT.ROM は実機から吸い出したものを、このフォルダに入れてください。FONT.ROM が無いときは iOS のフォント（ヒラギノ）から文字を作ります。default.ttf という名前で TrueType フォントを置くと、そちらを使います。",
 				@"ファイル App や共有シートでディスクイメージを NP21 で開くと、フロッピードライブに入れるか、ハードディスクとしてつなぐかを選べます。ほかのファイル（レコンポーザの曲など）は Z: ドライブにコピーできます。",
 			]),
 			topic(@"リンク（ショートカット App）", @[
@@ -1369,7 +1369,7 @@ void settingsview_presentguide(UIViewController *host)
 		 "1. パソコンや iCloud Drive からディスクイメージを用意します。\n"
 		 "2. ≡ メニューの「ハードディスク」か「FDD1 にディスクを入れる」で選びます（アプリのフォルダにコピーされます）。\n"
 		 "3. ハードディスクはリセットすると起動します。\n\n"
-		 "実機から吸い出した BIOS.ROM と FONT.ROM は %@ に入れてください。無くても互換 BIOS で起動しますが、文字（特に漢字）が正しく表示されないことがあります。\n\n"
+		 "実機から吸い出した BIOS.ROM と FONT.ROM は %@ に入れてください。無くても互換 BIOS で起動し、文字は iOS のフォントから作ります（見た目は実機と少し違います）。\n\n"
 		 "PC-98 の特殊キー（STOP、f·1〜f·10、GRPH など）は画面下（iPhone では右）のバーにあります。",
 		data_dir_hint(nil)];
 	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"はじめに" message:message

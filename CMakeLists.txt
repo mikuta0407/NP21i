@@ -166,8 +166,8 @@ list(APPEND NP2_SOURCES ${_np2_glob} ${_np2_glob_flat})
 list(FILTER NP2_SOURCES EXCLUDE REGEX "/wab/tgui9680")
 # Replaced by the iOS layer (CoreMIDI).
 list(FILTER NP2_SOURCES EXCLUDE REGEX "/sdl/cmmidi\\.c$")
-# fontmng.c is compiled as-is; SDL_ttf is satisfied by a stub header (ios/shim)
-# until a CoreText based font manager replaces it.
+# Replaced by a Core Text font manager (kanji without FONT.ROM).
+list(FILTER NP2_SOURCES EXCLUDE REGEX "/sdl/fontmng\\.c$")
 
 # ---- iOS platform layer --------------------------------------------------
 set(IOS_SOURCES
@@ -176,6 +176,7 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/debugmidi.m
 	${IOS_DIR}/src/debugscreen.m
 	${IOS_DIR}/src/textscreen.m
+	${IOS_DIR}/src/fontmng.m
 	${IOS_DIR}/src/clipboard.m
 	${IOS_DIR}/src/openurl.m
 	${IOS_DIR}/src/extdisplay.m
@@ -205,7 +206,6 @@ add_executable(NP21iOS MACOSX_BUNDLE ${NP2_SOURCES} ${IOS_SOURCES})
 
 target_include_directories(NP21iOS PRIVATE
 	${IOS_DIR}/src
-	${IOS_DIR}/shim
 	${SDL2_COMPAT_INCLUDE}
 	${NP2_DIR}
 	${NP2_DIR}/sdl
@@ -247,7 +247,7 @@ target_compile_options(NP21iOS PRIVATE
 set_source_files_properties(${NP2_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-everything;-O2")
 
 target_link_libraries(NP21iOS PRIVATE ${SDL_LIBRARIES} "-framework CoreMIDI" "-framework GameController" "-framework UniformTypeIdentifiers" "-framework CoreAudioKit" "-framework AudioToolbox"
-	"-framework AVFoundation" "-framework CoreMedia" "-framework CoreVideo")
+	"-framework AVFoundation" "-framework CoreMedia" "-framework CoreVideo" "-framework CoreText")
 
 # Settings app entries (copied as a folder; CodeSign runs after this step).
 add_custom_command(TARGET NP21iOS POST_BUILD

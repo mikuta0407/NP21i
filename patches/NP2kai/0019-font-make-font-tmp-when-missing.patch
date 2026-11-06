@@ -1,0 +1,28 @@
+diff --git a/font/font.c b/font/font.c
+index a09dbed..dda91fb 100755
+--- a/font/font.c
++++ b/font/font.c
+@@ -131,6 +131,7 @@ const UINT8	*p;
+ 	OEMCHAR	fname[MAX_PATH];
+ 	UINT8	type;
+ 	UINT8	loading;
++	FILEH	fh;
+ 
+ 	if (filename) {
+ 		file_cpyname(fname, filename, NELEMENTS(fname));
+@@ -196,9 +197,14 @@ const UINT8	*p;
+ 	loading = fontpc88_read(file_getcd(pc88ankname), loading);
+ 	if (loading & FONTLOAD_16) {
+ 		file_cpyname(fname, file_getcd(fonttmpname), NELEMENTS(fname));
+-		if (file_attr(fname) == -1) {
++		/* file_attr() of the SDL port gives 0, not -1, for a missing file */
++		fh = file_open_rb(fname);
++		if (fh == FILEH_INVALID) {
+ 			makepc98bmp(fname, defaultfontface);
+ 		}
++		else {
++			file_close(fh);
++		}
+ 		loading = fontpc98_read(fname, loading);
+ 	}
+ 	return(type);
