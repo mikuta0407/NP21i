@@ -72,6 +72,7 @@ static const CGFloat kMinSideWidth = 44;
 static const CGFloat kMaxSideWidth = 76;
 static const CGFloat kGap = 4;
 static const CGFloat kGroupGap = 12;
+static const CGFloat kHingeGap = 40;		/* folded: kept clear above the hinge, hard to see across the fold */
 
 static NSString *const kHiddenKey = @"keybar_hidden";
 static NSString *const kDPadPortraitKey = @"dpad_portrait";		/* below the bar, default on */
@@ -284,6 +285,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	NP2HingePosture _hinge;
 	NP2Fold _fold;			/* folded: the keyboard takes part of the screen */
 	BOOL _shownForFold;		/* the keyboard came up by itself when folded */
+	BOOL _statusBarHidden;	/* folded like a laptop: room for the screen above the hinge */
 	UIButton *_dpadButton;
 	NP2DPad *_dpad;
 	NP2TrackpadView *_trackpad;	/* under everything, over SDL's view */
@@ -1694,6 +1696,16 @@ static NP2FileKind file_kind(NSString *name)
 	CGFloat keyboardHeight = 0;
 	CGFloat hinge = round(viewH / 2);
 	BOOL folded = _screenKeyboardShown && (_fold == NP2FoldLaptop);
+	if (folded != _statusBarHidden) {
+		/* the safe area changes with it, and this is laid out again; not
+		 * from inside this layout, which SDL's view would redo */
+		_statusBarHidden = folded;
+		dispatch_async(dispatch_get_main_queue(), ^{
+			np21_setstatusbarhidden(folded);
+			/* SDL tells only a window on the main screen; the Duo's inner one may not be */
+			[np21_sdl_uiwindow().rootViewController setNeedsStatusBarAppearanceUpdate];
+		});
+	}
 	if (folded) {
 		keyboardHeight = viewH - hinge - kOverlayBarHeight;
 	}
@@ -1715,29 +1727,21 @@ static NP2FileKind file_kind(NSString *name)
 	 * for the bar, shrinking the screen a little. */
 	int pad = 0;
 	int toppad = 0;
-	if (folded) {
-		/* The upper half is the screen's alone: as large as fits below the
-		 * status bar, in the middle of what is left. SDL fits the screen
-		 * with both bands to the height, so their sum sets the scale, and
-		 * the band above, where the screen starts. */
-		CGFloat available = hinge - safe.top;
+	if (_screenKeyboardShown) {
+		/* The screen right below the status bar, as large as fits above
+		 * the bar and the keyboard; folded, above a gap over the hinge (the
+		 * upper half is the screen's alone). SDL fits the screen with both
+		 * bands to the height, so their sum sets the scale, and the band
+		 * above, where the screen starts. */
+		CGFloat screenTop = safe.top;
+		CGFloat screenBottom = folded ? hinge - kHingeGap : viewH - keyboardHeight - kOverlayBarHeight;
+		CGFloat available = screenBottom - screenTop;
 		BOOL fullWidth = (viewW / sw <= available / sh);
 		CGFloat s = fullWidth ? viewW / sw : available / sh;
-		CGFloat screenTop = safe.top + (available - sh * s) / 2;
 		/* rounded so that the scale is not larger than s */
 		int total = fullWidth ? (int)floor(viewH / s) : (int)ceil(viewH / s);
-		toppad = (int)floor(screenTop / s);
+		toppad = (int)ceil(screenTop / s);	/* not into the status bar */
 		pad = MAX(0, total - sh - toppad);
-	}
-	else if (_screenKeyboardShown) {
-		/* the screen above the bar and the keyboard: shrink it to fit */
-		CGFloat available = viewH - keyboardHeight - kOverlayBarHeight;
-		if (viewW / sw <= available / sh) {
-			pad = MAX(0, (int)((viewH - 2 * safe.top) / (viewW / sw)) - sh);	/* at the top, full width */
-		}
-		else {
-			pad = MAX(0, (int)ceil(viewH / (available / sh)) - sh);			/* at the top, centered */
-		}
 	}
 	else if (!_hidden && viewH > viewW) {
 		/* portrait (iPad): screen at the top, the bar and the software

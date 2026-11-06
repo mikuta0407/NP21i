@@ -162,6 +162,27 @@ static inline void np21_pushmouse(int what, float x, float y)
 	SDL_PushEvent(&e);
 }
 
+/* iOS's status bar: SDL hides it for a borderless window. */
+static inline void np21_setstatusbarhidden(int hidden)
+{
+#if USE_SDL >= 3
+	int count = 0;
+	SDL_Window **windows = SDL_GetWindows(&count);
+	if (windows && count > 0) {
+		SDL_SetWindowBordered(windows[0], hidden ? false : true);
+	}
+	SDL_free(windows);
+#else
+	for (Uint32 id = 1; id < 8; id++) {
+		SDL_Window *window = SDL_GetWindowFromID(id);
+		if (window) {
+			SDL_SetWindowBordered(window, hidden ? SDL_FALSE : SDL_TRUE);
+			break;
+		}
+	}
+#endif
+}
+
 /* Relative mouse mode: with a mouse connected to an iPad, iOS locks the
  * pointer in the app and SDL reports how far the mouse moves. */
 static inline void np21_setrelativemouse(int on)
