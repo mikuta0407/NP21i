@@ -13,6 +13,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "")
 
 set(NP2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/NP2kai")
+# CFBundleShortVersionString; the build number is set by scripts/make-release.sh
+set(NP21_VERSION "0.1")
 set(NP21_SDL "3" CACHE STRING "SDL major version: 2 or 3")
 if(NP21_SDL EQUAL 3)
 	set(SDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/SDL3")
@@ -202,7 +204,13 @@ set(IOS_SOURCES
 	${IOS_DIR}/src/settings.m
 )
 
-add_executable(NP21iOS MACOSX_BUNDLE ${NP2_SOURCES} ${IOS_SOURCES})
+# app icon and the privacy manifest, compiled / copied into the bundle by Xcode
+set(IOS_RESOURCES
+	${IOS_DIR}/Assets.xcassets
+	${IOS_DIR}/PrivacyInfo.xcprivacy
+)
+
+add_executable(NP21iOS MACOSX_BUNDLE ${NP2_SOURCES} ${IOS_SOURCES} ${IOS_RESOURCES})
 
 target_include_directories(NP21iOS PRIVATE
 	${IOS_DIR}/src
@@ -262,6 +270,13 @@ add_custom_command(TARGET NP21iOS POST_BUILD
 
 set_target_properties(NP21iOS PROPERTIES
 	MACOSX_BUNDLE_INFO_PLIST "${IOS_DIR}/Info.plist"
+	RESOURCE "${IOS_RESOURCES}"
+	XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon"
+	XCODE_ATTRIBUTE_MARKETING_VERSION "${NP21_VERSION}"
+	XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "1"
+	# without these, xcodebuild archive leaves the app out of the archive
+	XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
+	XCODE_ATTRIBUTE_INSTALL_PATH "$(LOCAL_APPS_DIR)"
 	XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "net.mikuta0407.np21ios"
 	XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
 	XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC "YES"
