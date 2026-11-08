@@ -286,6 +286,7 @@ typedef NS_ENUM(NSInteger, NP2Fold) {
 	NP2Fold _fold;			/* folded: the keyboard takes part of the screen */
 	BOOL _shownForFold;		/* the keyboard came up by itself when folded */
 	BOOL _statusBarHidden;	/* folded like a laptop: room for the screen above the hinge */
+	CGSize _laidOutSize;	/* the view size of the last layout */
 	UIButton *_dpadButton;
 	NP2DPad *_dpad;
 	NP2TrackpadView *_trackpad;	/* under everything, over SDL's view */
@@ -1683,6 +1684,13 @@ static NP2FileKind file_kind(NSString *name)
 		[self setZoom:1 center:CGPointZero];		/* another screen mode */
 	}
 	_screenSize = CGSizeMake(sw, sh);
+	if (!CGSizeEqualToSize(bounds.size, _laidOutSize)) {
+		/* Rotated: SDL's drawable has the new size, but until something is
+		 * drawn, the last frame is shown stretched to it (when the bands
+		 * below stay the same, nothing else draws while the screen is still). */
+		_laidOutSize = bounds.size;
+		scrnmng_update();
+	}
 	[self updateFold];
 	if (_screenKeyboardShown && (_fold == NP2FoldScreenLeft || _fold == NP2FoldScreenRight)) {
 		[self layoutSideBySide:CGSizeMake(sw, sh)];
