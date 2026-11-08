@@ -28,6 +28,9 @@ set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_TEST OFF CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+# SDL3's camera code (AVCaptureDevice) would make App Store Connect ask for
+# a camera purpose string; the app never uses a camera.
+set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
 add_subdirectory("${SDL_DIR}" "${CMAKE_BINARY_DIR}/SDL" EXCLUDE_FROM_ALL)
 if(NP21_SDL EQUAL 3)
 	# <SDL3/SDL.h> is the layout of SDL3's own include directory
