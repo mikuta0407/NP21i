@@ -40,10 +40,15 @@ open build/ios/NP21iOS.xcodeproj
 
 ## ライセンス
 
+このプロジェクトで書いたコードは MIT ライセンスです（[LICENSE](LICENSE)）。次のものは元のライセンスのままです。
+
 - `vendor/NP2kai`: ファイルごとに `vendor/NP2kai/LICENSES/` のとおり（大半は Neko Project II / 21/W の修正 BSD、NP2kai 独自部分は MIT）。
   GPL のファイル、fmgen、HAXM などはビルドから外しています。
 - `vendor/SDL`, `vendor/SDL3`: zlib ライセンス。
-- アプリ内の「ライセンス」に、使っているもののライセンス文をまとめて表示します（`scripts/make-licenses.sh`）。
+- `patches/`: 当てる先のファイルのライセンス。
+- `ios/src/cmmidi.c`, `ios/src/compiler.h`: NP2kai のファイルをもとにしているので Neko Project II のライセンス（修正 BSD）。
 - アプリのアイコンは NP2kai の `misc/np2.svg` をもとにしています。
+
+アプリ内の「ライセンス」に、使っているもののライセンス文をまとめて表示します（`scripts/make-licenses.sh`）。
 
 PC-98、PC-9801、PC-9821 は日本電気株式会社の商標です。本プロジェクトは日本電気株式会社、Neko Project 21/W および NP2kai の開発者とは関係ありません。

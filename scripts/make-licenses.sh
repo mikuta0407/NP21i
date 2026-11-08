@@ -22,6 +22,8 @@ sjis() {
 
 	printf '%s\n' "ディスクに組み込む HOSTDRV.COM も Neko Project II（np2tool）のものです。"
 
+	section "NP21i (mikuta0407)"
+	cat "$ROOT/LICENSE"
 	section "Neko Project II / Neko Project 21/W (NP2 developer team)"
 	sjis "$L/LICENSE.TXT"
 	section "NP2kai (AZO)"
