@@ -1067,7 +1067,7 @@ void diskedit_present(UIViewController *host)
 	list.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone primaryAction:[UIAction actionWithHandler:^(UIAction *action) {
 		(void)action;
 		[weakList done];
-	}] menu:nil];
+	}]];
 	nav.modalPresentationStyle = UIModalPresentationFormSheet;
 	nav.modalInPresentation = YES;		/* closed with Done only, which finishes up */
 	s_list = list;

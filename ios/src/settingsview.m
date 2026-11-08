@@ -1285,7 +1285,7 @@ static void present_screen(UIViewController *host, UIViewController *root)
 	root.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone primaryAction:[UIAction actionWithHandler:^(UIAction *action) {
 		(void)action;
 		[nav dismissViewControllerAnimated:YES completion:nil];
-	}] menu:nil];
+	}]];
 	nav.modalPresentationStyle = UIModalPresentationFormSheet;
 	[host presentViewController:nav animated:YES completion:nil];
 }

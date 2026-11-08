@@ -108,7 +108,7 @@ void clipboard_copyscreen(void)
 	self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone primaryAction:[UIAction actionWithHandler:^(UIAction *action) {
 		(void)action;
 		[weakSelf dismissViewControllerAnimated:YES completion:nil];
-	}] menu:nil];
+	}]];
 }
 
 @end
