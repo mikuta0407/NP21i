@@ -151,7 +151,7 @@ void midirec_stop(UIViewController *host)
 	NSDateFormatter *format = [NSDateFormatter new];
 	format.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
 	format.dateFormat = @"yyyyMMdd-HHmmss";
-	NSString *path = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"NP21 %@.mid", [format stringFromDate:[NSDate date]]]];
+	NSString *path = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"NP21i %@.mid", [format stringFromDate:[NSDate date]]]];
 	if (![make_smf(events) writeToFile:path atomically:YES]) {
 		NSLog(@"midirec: could not write %@", path);
 		return;

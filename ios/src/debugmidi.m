@@ -6,15 +6,15 @@
  * the app's virtual endpoints are checked from inside the app:
  *
  * NP2_DEBUG_MIDIMON=1
- *   Connects a separate client to the virtual source "NP21 MIDI OUT" and logs
+ *   Connects a separate client to the virtual source "NP21i MIDI OUT" and logs
  *   every packet to Documents/sdlnp21kai/midimon.log as
  *   "<ms since start> <hex bytes>". The time is the packet's delivery
  *   timestamp (or the arrival time when the packet is not timestamped).
  *
  * NP2_DEBUG_MIDIIN="<delay ms>:<hex bytes>,..."
- *   Sends the given messages to the virtual destination "NP21 MIDI IN",
+ *   Sends the given messages to the virtual destination "NP21i MIDI IN",
  *   e.g. "40000:90 3c 64,500:80 3c 00". "B" before the bytes sends to
- *   "NP21 MIDI IN B" (S-MPU port B) instead: "500:B 90 3c 64".
+ *   "NP21i MIDI IN B" (S-MPU port B) instead: "500:B 90 3c 64".
  *   While the app runs, a script written to debugmidiin.txt in the data
  *   directory is also sent (same format) and the file is deleted.
  */
@@ -84,9 +84,9 @@ static void monitor_proc(const MIDIPacketList *list, void *ref, void *src)
 
 static void start_monitor(void)
 {
-	MIDIEndpointRef src = find_endpoint(TRUE, @"NP21 MIDI OUT");
+	MIDIEndpointRef src = find_endpoint(TRUE, @"NP21i MIDI OUT");
 	if (!src) {
-		NSLog(@"debugmidi: NP21 MIDI OUT not found");
+		NSLog(@"debugmidi: NP21i MIDI OUT not found");
 		return;
 	}
 	s_monlog = fopen("midimon.log", "w");	/* cwd is the data directory */
@@ -96,7 +96,7 @@ static void start_monitor(void)
 	MIDIPortRef port;
 	MIDIInputPortCreate(s_client, CFSTR("monitor"), monitor_proc, NULL, &port);
 	MIDIPortConnectSource(port, src, NULL);
-	NSLog(@"debugmidi: monitoring NP21 MIDI OUT -> midimon.log");
+	NSLog(@"debugmidi: monitoring NP21i MIDI OUT -> midimon.log");
 }
 
 static void send_script(char *script, MIDIPortRef port, MIDIEndpointRef dsta, MIDIEndpointRef dstb)
@@ -157,7 +157,7 @@ static void *midiin_thread(void *arg)
 	MIDIOutputPortCreate(s_client, CFSTR("feeder"), &port);
 
 	if (script) {
-		send_script(script, port, find_endpoint(FALSE, @"NP21 MIDI IN"), find_endpoint(FALSE, @"NP21 MIDI IN B"));
+		send_script(script, port, find_endpoint(FALSE, @"NP21i MIDI IN"), find_endpoint(FALSE, @"NP21i MIDI IN B"));
 		free(script);
 	}
 	/* cwd is the data directory (see main.m) */
@@ -173,7 +173,7 @@ static void *midiin_thread(void *arg)
 		remove("debugmidiin.txt");
 		buf[n] = '\0';
 		buf[strcspn(buf, "\r\n")] = '\0';
-		send_script(buf, port, find_endpoint(FALSE, @"NP21 MIDI IN"), find_endpoint(FALSE, @"NP21 MIDI IN B"));
+		send_script(buf, port, find_endpoint(FALSE, @"NP21i MIDI IN"), find_endpoint(FALSE, @"NP21i MIDI IN B"));
 	}
 	return NULL;
 }
@@ -183,7 +183,7 @@ void debugmidi_start(void)
 	const char *mon = getenv("NP2_DEBUG_MIDIMON");
 	const char *in = getenv("NP2_DEBUG_MIDIIN");
 	s_start = mach_absolute_time();
-	if (MIDIClientCreate(CFSTR("NP21 debug"), NULL, NULL, &s_client) != noErr) {
+	if (MIDIClientCreate(CFSTR("NP21i debug"), NULL, NULL, &s_client) != noErr) {
 		return;
 	}
 	if (mon && mon[0]) {

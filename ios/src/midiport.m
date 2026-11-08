@@ -20,10 +20,10 @@
 /* The app's virtual endpoints, one pair per MIDI port of the emulated board
  * (the B pair only for S-MPU port B, created when it is opened). */
 static const CFStringRef s_virtualoutnames[MIDIPORT_VIRTUALS] = {
-	CFSTR("NP21 MIDI OUT"), CFSTR("NP21 MIDI OUT B")
+	CFSTR("NP21i MIDI OUT"), CFSTR("NP21i MIDI OUT B")
 };
 static const CFStringRef s_virtualinnames[MIDIPORT_VIRTUALS] = {
-	CFSTR("NP21 MIDI IN"), CFSTR("NP21 MIDI IN B")
+	CFSTR("NP21i MIDI IN"), CFSTR("NP21i MIDI IN B")
 };
 
 enum {
@@ -33,7 +33,7 @@ enum {
 
 struct _midiport_out {
 	const char		*selection;		/* live: points into the config */
-	UINT			virtual;		/* which "NP21 MIDI OUT" also gets the data */
+	UINT			virtual;		/* which "NP21i MIDI OUT" also gets the data */
 	MIDIEndpointRef	dests[32];
 	UINT			ndests;
 	MIDIPORTOUT		next;
@@ -46,7 +46,7 @@ typedef struct {
 
 struct _midiport_in {
 	const char		*selection;		/* live: points into the config */
-	UINT			virtual;		/* which "NP21 MIDI IN" it also receives */
+	UINT			virtual;		/* which "NP21i MIDI IN" it also receives */
 	MIDIPortRef		port;			/* its own, so that each input gets every source */
 	MIDIPORTIN		next;
 	MIDIEndpointRef	sources[MIDIIN_MAXSOURCES];
@@ -210,7 +210,7 @@ static void read_proc(const MIDIPacketList *list, void *readProcRefCon, void *sr
 	os_unfair_lock_unlock(&s_inlock);
 }
 
-/* From other apps, to "NP21 MIDI IN" (refCon: its index): every input of that port gets it. */
+/* From other apps, to "NP21i MIDI IN" (refCon: its index): every input of that port gets it. */
 static void virtual_read_proc(const MIDIPacketList *list, void *readProcRefCon, void *srcConnRefCon)
 {
 	(void)srcConnRefCon;
@@ -245,7 +245,7 @@ BOOL midiport_initialize(void)
 	if (s_client) {
 		return TRUE;
 	}
-	OSStatus err = MIDIClientCreateWithBlock(CFSTR("NP21"), &s_client, ^(const MIDINotification *message) {
+	OSStatus err = MIDIClientCreateWithBlock(CFSTR("NP21i"), &s_client, ^(const MIDINotification *message) {
 		/* Devices come and go (USB, Bluetooth): re-resolve the selections.
 		 * Handles are used by the emulator on the main thread. */
 		if (message->messageID == kMIDIMsgSetupChanged) {
@@ -262,7 +262,7 @@ BOOL midiport_initialize(void)
 		s_client = 0;
 		return FALSE;
 	}
-	MIDIOutputPortCreate(s_client, CFSTR("NP21 Out"), &s_outport);
+	MIDIOutputPortCreate(s_client, CFSTR("NP21i Out"), &s_outport);
 	create_virtuals(0);
 	NSLog(@"midiport: %lu destinations, %lu sources",
 		(unsigned long)MIDIGetNumberOfDestinations(), (unsigned long)MIDIGetNumberOfSources());
@@ -342,7 +342,7 @@ MIDIPORTIN midiport_openin(const char *selection, UINT virtual)
 	create_virtuals(virtual);
 	in->selection = selection;
 	in->virtual = virtual;
-	if (MIDIInputPortCreate(s_client, CFSTR("NP21 In"), read_proc, in, &in->port) != noErr) {
+	if (MIDIInputPortCreate(s_client, CFSTR("NP21i In"), read_proc, in, &in->port) != noErr) {
 		free(in);
 		return NULL;
 	}

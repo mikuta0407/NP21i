@@ -327,8 +327,8 @@ static UIViewController *port_screen(NSString *title, BOOL sources, char *select
 		[labels addObject:port_label(value.UTF8String)];
 	}
 	NSString *footer = sources
-		? [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器から受け取ります。他のアプリからは「NP21 MIDI IN%@」に送れます。", virtualName]
-		: [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器に送ります。「内蔵音源」はアプリの中の音源（SoundFont）で鳴らします。他のアプリは、どれを選んでも「NP21 MIDI OUT%@」から受け取れます。", virtualName];
+		? [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器から受け取ります。他のアプリからは「NP21i MIDI IN%@」に送れます。", virtualName]
+		: [NSString stringWithFormat:@"「すべての機器」は接続中のすべての MIDI 機器に送ります。「内蔵音源」はアプリの中の音源（SoundFont）で鳴らします。他のアプリは、どれを選んでも「NP21i MIDI OUT%@」から受け取れます。", virtualName];
 	return choice_screen(title, footer, labels, ^NSInteger {
 		NSString *now = [NSString stringWithUTF8String:selection];
 		NSUInteger index = [values indexOfObject:now.length ? now : kAllPorts];
@@ -380,7 +380,7 @@ static NSString *clock_label(UINT multiple)
 
 static NSString *data_dir_hint(NSString *subdir)
 {
-	NSString *path = @"ファイル App →「このiPad内」/「このiPhone内」→ NP21 → sdlnp21kai";
+	NSString *path = @"ファイル App →「このiPad内」/「このiPhone内」→ NP21i → sdlnp21kai";
 	return subdir ? [path stringByAppendingFormat:@" → %@", subdir] : path;
 }
 
@@ -515,7 +515,7 @@ static void create_disk(UIViewController *controller, const NEWDISKKIND *kind, U
 	dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
 		const char *fname = path.fileSystemRepresentation;
 		if (floppy) {
-			newdisk_fdd(fname, DISKTYPE_2HD << 4, "NP21");
+			newdisk_fdd(fname, DISKTYPE_2HD << 4, "NP21i");
 		}
 		else if ([ext isEqualToString:@"nhd"]) {
 			newdisk_nhd(fname, sizemb);
@@ -668,7 +668,7 @@ static UIViewController *help_screen(void)
 			]),
 			topic(@"MIDI", @[
 				@"設定 →「MIDI」で出力先と入力元を選びます。Bluetooth MIDI 機器もそこで接続できます。",
-				@"MIDI 機器がなくても、出力先を「内蔵音源」にするとアプリの中で鳴ります。音色ファイル（SoundFont .sf2 / DLS .dls、GS 配列のものがおすすめ）を 設定 →「内蔵音源」で追加してください。ファイル App から NP21 で開いても追加できます。",
+				@"MIDI 機器がなくても、出力先を「内蔵音源」にするとアプリの中で鳴ります。音色ファイル（SoundFont .sf2 / DLS .dls、GS 配列のものがおすすめ）を 設定 →「内蔵音源」で追加してください。ファイル App から NP21i で開いても追加できます。",
 				@"「MIDI クロックを送る」をオンにすると、外部の機材や DAW がソフトのテンポに合わせて動きます。",
 			]),
 			topic(@"iPhone Duo", @[
@@ -677,7 +677,7 @@ static UIViewController *help_screen(void)
 			topic(@"ファイル", @[
 				[NSString stringWithFormat:@"%@ に、ハードディスク（hdd）、フロッピー（fdd）、Z: ドライブ（hostdrv）、記録（captures、midi）、環境（profiles）があります。", data_dir_hint(nil)],
 				@"BIOS.ROM と FONT.ROM は実機から吸い出したものを、このフォルダに入れてください。FONT.ROM が無いときは iOS のフォント（ヒラギノ）から文字を作ります。default.ttf という名前で TrueType フォントを置くと、そちらを使います。",
-				@"ファイル App や共有シートでディスクイメージを NP21 で開くと、フロッピードライブに入れるか、ハードディスクとしてつなぐかを選べます。ほかのファイル（レコンポーザの曲など）は Z: ドライブにコピーできます。",
+				@"ファイル App や共有シートでディスクイメージを NP21i で開くと、フロッピードライブに入れるか、ハードディスクとしてつなぐかを選べます。ほかのファイル（レコンポーザの曲など）は Z: ドライブにコピーできます。",
 			]),
 			topic(@"リンク（ショートカット App）", @[
 				@"np21:// で始まるリンクで操作できます。ショートカット App の「URL を開く」から使えます。",
@@ -1033,7 +1033,7 @@ static NSArray<NP2Section *> *settings_sections(void)
 				[c.navigationController pushViewController:port_screen(title, sources, selection, size, virtualName) animated:YES];
 			});
 		};
-		[sections addObject:section(@"S-MPU", @"S-MPU の 2 つのポートの接続先です。ポート A はほかのアプリからは「NP21 MIDI OUT」「NP21 MIDI IN」、ポート B は「NP21 MIDI OUT B」「NP21 MIDI IN B」でつなげます。", @[
+		[sections addObject:section(@"S-MPU", @"S-MPU の 2 つのポートの接続先です。ポート A はほかのアプリからは「NP21i MIDI OUT」「NP21i MIDI IN」、ポート B は「NP21i MIDI OUT B」「NP21i MIDI IN B」でつなげます。", @[
 			port(@"ポート A の出力先", NO, np2oscfg.smpuA.mout, sizeof(np2oscfg.smpuA.mout), @""),
 			port(@"ポート A の入力元", YES, np2oscfg.smpuA.min, sizeof(np2oscfg.smpuA.min), @""),
 			port(@"ポート B の出力先", NO, np2oscfg.smpuB.mout, sizeof(np2oscfg.smpuB.mout), @" B"),

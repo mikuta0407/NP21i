@@ -1,8 +1,8 @@
 #!/bin/sh
 # End-to-end real-time recording test with Recomposer GS on the simulator.
 #   1. boot Recomposer, set track 1 to Rec, start recording
-#   2. send notes to NP21 MIDI IN at <interval ms>
-#   3. stop, play the track back and capture NP21 MIDI OUT
+#   2. send notes to NP21i MIDI IN at <interval ms>
+#   3. stop, play the track back and capture NP21i MIDI OUT
 #   4. compare playback note intervals with the input intervals
 # usage: scripts/sim-rec-test.sh <simulator udid> [notes=32] [interval ms=250] [timebase=48]
 set -eu

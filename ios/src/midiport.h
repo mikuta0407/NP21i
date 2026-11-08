@@ -13,9 +13,9 @@
  * removed, so a Bluetooth device connected later is picked up.
  *
  * Independently of the selection, an opened output is always also sent to the
- * app's virtual source "NP21 MIDI OUT", and an opened input always also receives
- * from the app's virtual destination "NP21 MIDI IN", so other apps can connect.
- * S-MPU's port B has its own pair, "NP21 MIDI OUT B" / "NP21 MIDI IN B"
+ * app's virtual source "NP21i MIDI OUT", and an opened input always also receives
+ * from the app's virtual destination "NP21i MIDI IN", so other apps can connect.
+ * S-MPU's port B has its own pair, "NP21i MIDI OUT B" / "NP21i MIDI IN B"
  * (`virtual` 1). Each open input gets everything its sources send, so two
  * inputs can take from the same device.
  */
@@ -49,7 +49,7 @@ extern void (*midiport_onchange)(void);
 
 /* Returns NULL only when CoreMIDI is unavailable. `selection` must stay valid
  * until the handle is closed. `virtual`: which of the app's virtual endpoint
- * pairs also gets the data (0 "NP21 MIDI OUT/IN", 1 "... B"). */
+ * pairs also gets the data (0 "NP21i MIDI OUT/IN", 1 "... B"). */
 MIDIPORTOUT midiport_openout(const char *selection, UINT virtual);
 /* timestamp: mach_absolute_time() based host time to deliver at, 0 = now. */
 void midiport_send(MIDIPORTOUT hdl, const UINT8 *data, UINT length, UINT64 timestamp);

@@ -33,7 +33,7 @@ static NSString *capture_name(NSString *ext)
 	NSDateFormatter *format = [NSDateFormatter new];
 	format.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
 	format.dateFormat = @"yyyyMMdd-HHmmss";
-	return [NSString stringWithFormat:@"NP21 %@.%@", [format stringFromDate:[NSDate date]], ext];
+	return [NSString stringWithFormat:@"NP21i %@.%@", [format stringFromDate:[NSDate date]], ext];
 }
 
 static void share(UIViewController *host, NSURL *url)
