@@ -6,6 +6,14 @@ title: NP21i サポート / Support
 
 NP21i は iPhone・iPad で動く PC-98 シリーズのエミュレータです（NP2kai をもとにした非公式の移植版）。
 
+## インストール（AltStore PAL）
+
+日本では [AltStore PAL](https://altstore.io/) から入れられます。AltStore PAL の「ソース」→「＋」で次の URL を追加し、NP21i を入れてください。
+
+```
+https://mikuta0407.github.io/NP21i/altstore/source.json
+```
+
 ## はじめに
 
 1. ファイル App →「このiPhone内」/「このiPad内」→ **NP21i** → `sdlnp21kai` に、お持ちの実機から吸い出した BIOS などの ROM（`BIOS.ROM`, `ITF.ROM`, `FONT.ROM` ほか）を置きます。ROM がなくても内蔵の互換 BIOS で起動できるソフトもあります。
@@ -29,6 +37,14 @@ ROM やソフトウェアの入手についてはお答えできません。
 # NP21i Support (English)
 
 NP21i is an emulator of the NEC PC-98 series for iPhone and iPad, an unofficial port of NP2kai. The user interface is in Japanese.
+
+## Install (AltStore PAL)
+
+In Japan, NP21i is available through [AltStore PAL](https://altstore.io/). In AltStore PAL, go to Sources > "+", add this URL and install NP21i:
+
+```
+https://mikuta0407.github.io/NP21i/altstore/source.json
+```
 
 - Put ROM files dumped from your own machine (`BIOS.ROM`, `ITF.ROM`, `FONT.ROM`, …) in Files → On My iPhone / iPad → **NP21i** → `sdlnp21kai`. Some software starts with the built-in compatible BIOS, without ROMs.
 - Open disk images (`.hdi`, `.nhd`, `.d88`, `.fdi`, …) with NP21i from Files or the share sheet to insert them as floppy disks or connect them as hard disks.

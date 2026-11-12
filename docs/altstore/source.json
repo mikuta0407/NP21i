@@ -1,0 +1,99 @@
+{
+  "name": "NP21i",
+  "subtitle": "PC-98 emulator for iPhone and iPad",
+  "description": "NP21i, an unofficial port of NP2kai (np21kai) for iPhone and iPad.",
+  "iconURL": "https://mikuta0407.github.io/NP21i/altstore/icon.png",
+  "website": "https://mikuta0407.github.io/NP21i/",
+  "tintColor": "#3566C4",
+  "nsfw": false,
+  "featuredApps": [
+    "net.mikuta0407.np21ios"
+  ],
+  "apps": [
+    {
+      "name": "NP21i",
+      "bundleIdentifier": "net.mikuta0407.np21ios",
+      "marketplaceID": "6832183266",
+      "developerName": "mikuta0407",
+      "subtitle": "PC-98 emulator with MIDI",
+      "localizedDescription": "NP21i is an emulator of the NEC PC-98 series (PC-9801 and PC-9821), an unofficial port of NP2kai (np21kai), which includes the code of Neko Project 21/W.\n\nMIDI out and in through USB and Bluetooth MIDI devices or the built-in synthesizer, on-screen keyboards for the PC-98, music sequencers and games, hardware keyboards, mice and game controllers, and the laptop posture of iPhone Duo.\n\nNo ROMs, operating systems or software are included. The user interface is in Japanese.\n\nPC-98, PC-9801 and PC-9821 are trademarks of NEC Corporation. This app is not affiliated with NEC Corporation or with the developers of Neko Project 21/W and NP2kai.",
+      "iconURL": "https://mikuta0407.github.io/NP21i/altstore/icon.png",
+      "tintColor": "#3566C4",
+      "category": "utilities",
+      "screenshots": {
+        "iphone": [
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/iphone/01-pc98kbd.jpg",
+            "width": 660,
+            "height": 1434
+          },
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/iphone/02-rcpkbd.jpg",
+            "width": 660,
+            "height": 1434
+          },
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/iphone/03-gamekbd.jpg",
+            "width": 660,
+            "height": 1434
+          },
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/iphone/04-midi.jpg",
+            "width": 660,
+            "height": 1434
+          },
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/iphone/05-landscape.jpg",
+            "width": 1434,
+            "height": 660
+          }
+        ],
+        "ipad": [
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/ipad/01-pc98kbd.jpg",
+            "width": 1032,
+            "height": 1376
+          },
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/ipad/02-rcpkbd.jpg",
+            "width": 1032,
+            "height": 1376
+          },
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/ipad/03-gamekbd.jpg",
+            "width": 1032,
+            "height": 1376
+          },
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/ipad/04-midi.jpg",
+            "width": 1032,
+            "height": 1376
+          },
+          {
+            "imageURL": "https://mikuta0407.github.io/NP21i/altstore/screenshots/ipad/05-landscape.jpg",
+            "width": 1376,
+            "height": 1032
+          }
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1",
+          "buildVersion": "67",
+          "date": "2026-11-12T00:00:00+09:00",
+          "localizedDescription": "First release.",
+          "downloadURL": "https://mikuta0407.github.io/NP21i/altstore/adp/0.1-67/manifest.json",
+          "size": 1794649,
+          "minOSVersion": "15.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSBluetoothAlwaysUsageDescription": "Bluetooth MIDI 機器と接続するために使います。",
+          "NSPhotoLibraryAddUsageDescription": "PC-98 の画面のスクリーンショットや録画を写真に保存するために使います。"
+        }
+      }
+    }
+  ]
+}
